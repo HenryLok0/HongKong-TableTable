@@ -24,6 +24,28 @@
   --badge-ok-fg: #1f6b4a;
   --badge-miss-bg: #f8e6e6;
   --badge-miss-fg: #8a3b3b;
+  --tone-a-bg: #fde8e8;
+  --tone-a-fg: #b42318;
+  --tone-b-bg: #ffead6;
+  --tone-b-fg: #c2410c;
+  --tone-c-bg: #e5f4ec;
+  --tone-c-fg: #157a45;
+  --tone-d-bg: #fff4cc;
+  --tone-d-fg: #854d0e;
+  --tone-e-bg: #e4eefc;
+  --tone-e-fg: #1d4ed8;
+  --hs-b-bg: #f3e6d8;
+  --hs-b-fg: #7a4a22;
+  --hs-s-bg: #eceff3;
+  --hs-s-fg: #4b5563;
+  --hs-g-bg: #fff1b8;
+  --hs-g-fg: #8a5a00;
+  --hs-p-bg: #e7f5f4;
+  --hs-p-fg: #0f766e;
+  --hs-d-bg: #ece4fb;
+  --hs-d-fg: #5b21b6;
+  --hs-d2-bg: #f3e8ff;
+  --hs-d2-fg: #6b21a8;
 }
 
 [data-theme="dark"] {
@@ -52,6 +74,28 @@
   --badge-ok-fg: #b6e4cb;
   --badge-miss-bg: #3a2424;
   --badge-miss-fg: #f0c0c0;
+  --tone-a-bg: #4a2424;
+  --tone-a-fg: #ffc9c4;
+  --tone-b-bg: #4a2f1c;
+  --tone-b-fg: #ffd0a8;
+  --tone-c-bg: #1e3328;
+  --tone-c-fg: #b6e4cb;
+  --tone-d-bg: #3a3218;
+  --tone-d-fg: #f0d48a;
+  --tone-e-bg: #243044;
+  --tone-e-fg: #c5d8ff;
+  --hs-b-bg: #3a2c22;
+  --hs-b-fg: #e8c4a0;
+  --hs-s-bg: #2c3238;
+  --hs-s-fg: #d5dbe3;
+  --hs-g-bg: #3a3214;
+  --hs-g-fg: #f5d56a;
+  --hs-p-bg: #1c3332;
+  --hs-p-fg: #9ee0d8;
+  --hs-d-bg: #2e2444;
+  --hs-d-fg: #d7c4ff;
+  --hs-d2-bg: #35204a;
+  --hs-d2-fg: #ebb8ff;
 }
 
 * {
@@ -228,6 +272,10 @@ button.ghost {
   margin-top: 10px;
 }
 
+.toolbar-filters {
+  align-items: flex-start;
+}
+
 .toolbar-label {
   font-weight: 700;
   min-width: 3em;
@@ -243,10 +291,83 @@ button.ghost {
   margin: 0;
 }
 
+.filter-panel {
+  flex: 1;
+  min-width: 0;
+}
+
 .filter-box {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.filter-clear {
+  font-size: 13px;
+}
+
+.filter-group {
+  display: flex;
   gap: 8px 12px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.filter-group-label {
+  min-width: 3em;
+  padding-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  margin: 0;
+  cursor: pointer;
+}
+
+.filter-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.filter-chip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.filter-chip i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filter-chip:has(input:checked) span {
+  font-weight: 600;
+}
+
+.filter-status {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .settings {
@@ -378,6 +499,32 @@ button.ghost {
   color: var(--badge-miss-fg);
 }
 
+.badge.tone-a, .filter-chip.tone-a span { background: var(--tone-a-bg); color: var(--tone-a-fg); }
+.badge.tone-b, .filter-chip.tone-b span { background: var(--tone-b-bg); color: var(--tone-b-fg); }
+.badge.tone-c, .filter-chip.tone-c span { background: var(--tone-c-bg); color: var(--tone-c-fg); }
+.badge.tone-d, .filter-chip.tone-d span { background: var(--tone-d-bg); color: var(--tone-d-fg); }
+.badge.tone-e, .filter-chip.tone-e span { background: var(--tone-e-bg); color: var(--tone-e-fg); }
+.badge.hs-b, .filter-chip.hs-b span { background: var(--hs-b-bg); color: var(--hs-b-fg); }
+.badge.hs-s, .filter-chip.hs-s span { background: var(--hs-s-bg); color: var(--hs-s-fg); }
+.badge.hs-g, .filter-chip.hs-g span { background: var(--hs-g-bg); color: var(--hs-g-fg); }
+.badge.hs-p, .filter-chip.hs-p span { background: var(--hs-p-bg); color: var(--hs-p-fg); }
+.badge.hs-d, .filter-chip.hs-d span { background: var(--hs-d-bg); color: var(--hs-d-fg); }
+.badge.hs-d2, .filter-chip.hs-d2 span { background: var(--hs-d2-bg); color: var(--hs-d2-fg); }
+
+.filter-chip.tone-a:has(input:checked) span,
+.filter-chip.tone-b:has(input:checked) span,
+.filter-chip.tone-c:has(input:checked) span,
+.filter-chip.tone-d:has(input:checked) span,
+.filter-chip.tone-e:has(input:checked) span,
+.filter-chip.hs-b:has(input:checked) span,
+.filter-chip.hs-s:has(input:checked) span,
+.filter-chip.hs-g:has(input:checked) span,
+.filter-chip.hs-p:has(input:checked) span,
+.filter-chip.hs-d:has(input:checked) span,
+.filter-chip.hs-d2:has(input:checked) span {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -453,5 +600,10 @@ footer {
   .card-top {
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .filter-group {
+    flex-direction: column;
+    gap: 6px;
   }
 }

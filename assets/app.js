@@ -177,6 +177,15 @@ const FILTERS = [
   ...AGE_BANDS.map((b) => ({ group: "age", id: b.id, label: b.label })),
 ];
 
+const FILTER_GROUP_LABELS = {
+  gender: "性別",
+  bucket: "組別",
+  extra: "紀錄",
+  badge: "章別",
+  age: "年齡",
+};
+const FILTER_GROUP_ORDER = ["gender", "bucket", "extra", "badge", "age"];
+
 let snapshot = null;
 let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
@@ -600,6 +609,20 @@ function bestBadge(records) {
   })[0] || null;
 }
 
+function bucketTone(id) {
+  if (id === "hktta-a") return "tone-a";
+  if (id === "hktta-b") return "tone-b";
+  if (id === "hktta-c") return "tone-c";
+  if (id === "hktta-d") return "tone-d";
+  if (id === "hktta-e") return "tone-e";
+  if (id === "none") return "miss";
+  return "ok";
+}
+
+function badgeTone(id) {
+  return id ? `hs-${id}` : "ok";
+}
+
 function itemBadgeId(item) {
   const best = bestBadge(item.badges || []);
   return best ? badgeId(best.badge) : "";
@@ -609,7 +632,7 @@ function badgeChip(item) {
   const best = bestBadge(item.badges || []);
   if (!best) return "";
   const text = best.passed ? `恒生${best.badge}` : `報考${best.badge}`;
-  return `<span class="badge ok">${escapeHtml(text)}</span>`;
+  return `<span class="badge ${badgeTone(badgeId(best.badge))}">${escapeHtml(text)}</span>`;
 }
 
 function renderBadges(records) {
@@ -666,7 +689,7 @@ function renderCard(item, totals, orderLabel) {
           ${genderBadge(item)}
           ${ageBadge(item)}
           ${badgeChip(item)}
-          <span class="badge ${hasExtra ? "ok" : "miss"}">${escapeHtml(bucketText)}</span>
+          <span class="badge ${bucketTone(bucket)}">${escapeHtml(bucketText)}</span>
         </div>
         <div>${escapeHtml(orderLabel)}</div>
       </div>
@@ -692,7 +715,7 @@ function renderCard(item, totals, orderLabel) {
             ${genderBadge(item)}
             ${ageBadge(item)}
             ${badgeChip(item)}
-            <span class="badge ok">${escapeHtml(bucketText)}</span>
+            <span class="badge ${bucketTone(bucket)}">${escapeHtml(bucketText)}</span>
           </div>
           <div>${escapeHtml(orderLabel)}</div>
         </div>
@@ -726,12 +749,42 @@ function hasRecord(item) {
   return Boolean(item.matches.length || item.lcsd.length || (item.badges || []).length);
 }
 
+function listRankTier(item) {
+  if (item.matches.length) return 1;
+  const badges = item.badges || [];
+  if (badges.some((r) => r.passed)) return 2;
+  if (badges.length) return 3;
+  if (item.lcsd.length) return 4;
+  return 5;
+}
+
+function compareBadgeStrength(a, b) {
+  const left = bestBadge(a) || { badge: "", session: "" };
+  const right = bestBadge(b) || { badge: "", session: "" };
+  const level = badgeRank(right.badge) - badgeRank(left.badge);
+  if (level) return level;
+  return String(right.session).localeCompare(String(left.session));
+}
+
 function compareByListRank(a, b) {
-  const dataDiff = Number(hasRecord(b)) - Number(hasRecord(a));
-  if (dataDiff) return dataDiff;
-  const rankDiff = bestRank(a) - bestRank(b);
-  if (rankDiff) return rankDiff;
-  return bestPoints(b.matches) - bestPoints(a.matches);
+  const tierA = listRankTier(a);
+  const tier = tierA - listRankTier(b);
+  if (tier) return tier;
+  if (tierA === 1) {
+    const rankDiff = bestRank(a) - bestRank(b);
+    if (rankDiff) return rankDiff;
+    return bestPoints(b.matches) - bestPoints(a.matches);
+  }
+  if (tierA === 2) {
+    return compareBadgeStrength(
+      (a.badges || []).filter((r) => r.passed),
+      (b.badges || []).filter((r) => r.passed)
+    );
+  }
+  if (tierA === 3) {
+    return compareBadgeStrength(a.badges || [], b.badges || []);
+  }
+  return 0;
 }
 
 function selectedFilters(group) {
@@ -780,19 +833,52 @@ function filterHasPeople(filter, results) {
   return true;
 }
 
+function filterPeopleCount(filter, results) {
+  return results.filter((item) => {
+    if (filter.group === "gender") return inferGender(item).gender === filter.id;
+    if (filter.group === "bucket") return classify(item) === filter.id;
+    if (filter.group === "age") return ageBand(item) === filter.id;
+    if (filter.group === "badge") return itemBadgeId(item) === filter.id;
+    if (filter.id === "has-lcsd") return Boolean(item.lcsd.length);
+    if (filter.id === "has-badge") return Boolean((item.badges || []).length);
+    return false;
+  }).length;
+}
+
 function buildFilters(results) {
   const box = document.getElementById("filter-box");
   const selected = new Set(
     [...box.querySelectorAll("input:checked")].map((el) => `${el.dataset.group}:${el.value}`)
   );
   const visible = FILTERS.filter((f) => filterHasPeople(f, results));
-  box.innerHTML = visible
-    .map((f) => {
-      const key = `${f.group}:${f.id}`;
-      const checked = selected.has(key) ? " checked" : "";
-      return `<label class="choice"><input type="checkbox" data-group="${f.group}" value="${f.id}"${checked} /> ${escapeHtml(f.label)}</label>`;
+  const groups = FILTER_GROUP_ORDER
+    .map((group) => ({
+      group,
+      label: FILTER_GROUP_LABELS[group],
+      items: visible.filter((f) => f.group === group),
+    }))
+    .filter((row) => row.items.length);
+
+  const chips = groups
+    .map((row) => {
+      const options = row.items
+        .map((f) => {
+          const key = `${f.group}:${f.id}`;
+          const checked = selected.has(key) ? " checked" : "";
+          const count = filterPeopleCount(f, results);
+          const tone = f.group === "bucket" ? ` ${bucketTone(f.id)}` : f.group === "badge" ? ` ${badgeTone(f.id)}` : "";
+          return `<label class="filter-chip${tone}"><input type="checkbox" data-group="${f.group}" value="${f.id}"${checked} /> <span>${escapeHtml(f.label)}<i>${count}</i></span></label>`;
+        })
+        .join("");
+      return `<div class="filter-group"><span class="filter-group-label">${escapeHtml(row.label)}</span><div class="filter-chips">${options}</div></div>`;
     })
     .join("");
+
+  const hasSelection = selected.size > 0;
+  const clear = hasSelection
+    ? `<button type="button" id="clear-filters" class="ghost filter-clear">清除篩選</button>`
+    : "";
+  box.innerHTML = `${clear}${chips}` || `<p class="hint">呢份名單暫時冇可篩選嘅組別。</p>`;
 }
 
 function dateOnly(value) {
@@ -822,7 +908,7 @@ function updateStats(results) {
   const bucketCounts = Object.fromEntries(BUCKETS.map((b) => [b.id, 0]));
   for (const item of results) bucketCounts[classify(item)] += 1;
   document.getElementById("bucket-list").innerHTML = BUCKETS.filter((b) => bucketCounts[b.id] > 0)
-    .map((b) => `<li>${escapeHtml(b.label)}（${bucketCounts[b.id]}）</li>`)
+    .map((b) => `<li><span class="badge ${bucketTone(b.id)}">${escapeHtml(b.label)}</span>（${bucketCounts[b.id]}）</li>`)
     .join("");
 
   const ageCounts = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
@@ -875,6 +961,12 @@ function renderResults() {
       return renderCard(item, snapshot.totals, label);
     })
     .join("") || `<p class="hint">呢組篩選冇符合嘅球員。</p>`;
+  const status = document.getElementById("filter-status");
+  if (status) {
+    status.textContent = filtered.length === lastResults.length
+      ? `顯示全部 ${lastResults.length} 人`
+      : `顯示 ${filtered.length}／${lastResults.length} 人`;
+  }
 }
 
 function openHkttaSearch(name) {
@@ -968,6 +1060,13 @@ async function boot() {
   });
   document.getElementById("breakdown").addEventListener("change", (event) => {
     if (event.target.matches("input")) renderResults();
+  });
+  document.getElementById("breakdown").addEventListener("click", (event) => {
+    if (event.target.id !== "clear-filters") return;
+    document.querySelectorAll("#filter-box input:checked").forEach((el) => {
+      el.checked = false;
+    });
+    renderResults();
   });
   document.getElementById("results").addEventListener("click", (event) => {
     const btn = event.target.closest("[data-hktta]");

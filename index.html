@@ -74,9 +74,13 @@
           <label class="choice"><input type="radio" name="sort-mode" value="list" /> 按照球員名單排名</label>
           <label class="choice"><input type="radio" name="sort-mode" value="rank" checked /> 名單內排名</label>
         </div>
-        <div class="toolbar-row">
+        <p class="hint">名單內排名：乒總官方名次 → 考獲章別 → 報考章別 → 康文署 → 冇紀錄。唔會改卡片上嘅全港排名。</p>
+        <div class="toolbar-row toolbar-filters">
           <span class="toolbar-label">篩選</span>
-          <div id="filter-box" class="filter-box"></div>
+          <div class="filter-panel">
+            <div id="filter-box" class="filter-box"></div>
+            <p id="filter-status" class="filter-status"></p>
+          </div>
         </div>
       </div>
     </section>
@@ -105,7 +109,7 @@
     <input type="hidden" name="error" value="" />
   </form>
 
-  <script src="assets/app.js?v=20260904c"></script>
+  <script src="assets/app.js?v=20260904g"></script>
 </body>
 
 </html>
