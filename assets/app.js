@@ -229,7 +229,7 @@ function normalizeName(name) {
 function parseNames(raw) {
   const seen = new Set();
   const names = [];
-  for (const line of raw.split(/\r?\n/)) {
+  for (const line of String(raw || "").split(/\r?\n/)) {
     let text = line.trim();
     if (!text) continue;
     text = text.replace(/^[\d０-９]+[\.．、\)）]\s*/, "");
@@ -241,6 +241,47 @@ function parseNames(raw) {
     names.push(text);
   }
   return names;
+}
+
+function readSharedNames() {
+  const search = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+  const raw = search.get("n") || hash.get("n") || "";
+  return parseNames(raw.replace(/[,，]/g, "\n"));
+}
+
+function shareUrlFor(names) {
+  const url = new URL(location.href);
+  url.hash = "";
+  if (names.length) url.searchParams.set("n", names.join("\n"));
+  else url.searchParams.delete("n");
+  return url;
+}
+
+function syncShareUrl(names) {
+  const url = shareUrlFor(names);
+  if (url.href !== location.href) history.replaceState(null, "", url);
+}
+
+function setShareStatus(text) {
+  const el = document.getElementById("share-status");
+  if (el) el.textContent = text || "";
+}
+
+async function copyShareLink() {
+  const names = parseNames(document.getElementById("names").value);
+  if (!names.length) {
+    setShareStatus("請先輸入球員名單。");
+    return;
+  }
+  const url = shareUrlFor(names);
+  history.replaceState(null, "", url);
+  try {
+    await navigator.clipboard.writeText(url.href);
+    setShareStatus("已複製分享連結，對方打開就會自動查詢呢份名單。");
+  } catch {
+    setShareStatus(url.href);
+  }
 }
 
 function estimateGenderFromName(name) {
@@ -976,6 +1017,7 @@ function openHkttaSearch(name) {
 
 function runSearch() {
   const names = parseNames(document.getElementById("names").value);
+  syncShareUrl(names);
   if (!names.length) {
     lastResults = [];
     document.getElementById("summary").classList.add("hidden");
@@ -1050,10 +1092,18 @@ async function boot() {
     return;
   }
 
+  const shared = readSharedNames();
+  if (shared.length) {
+    document.getElementById("names").value = shared.join("\n");
+  }
+
   document.getElementById("search-btn").addEventListener("click", runSearch);
+  document.getElementById("share-btn").addEventListener("click", copyShareLink);
   document.getElementById("clear-btn").addEventListener("click", () => {
     document.getElementById("names").value = "";
     lastResults = [];
+    setShareStatus("");
+    syncShareUrl([]);
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");
     document.getElementById("results").innerHTML = "";

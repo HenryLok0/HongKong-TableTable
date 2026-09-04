@@ -43,10 +43,10 @@
       <textarea id="names" rows="16" placeholder="&#10;"></textarea>
       <div class="actions">
         <button id="search-btn" type="button">查詢名單</button>
+        <button id="share-btn" type="button" class="ghost">分享名單</button>
         <button id="clear-btn" type="button" class="ghost">清空</button>
       </div>
-      <p class="hint">
-      </p>
+      <p id="share-status" class="hint" aria-live="polite"></p>
     </section>
 
     <section id="summary" class="summary hidden"></section>
@@ -109,7 +109,7 @@
     <input type="hidden" name="error" value="" />
   </form>
 
-  <script src="assets/app.js?v=20260904g"></script>
+  <script src="assets/app.js?v=20260904h"></script>
 </body>
 
 </html>
