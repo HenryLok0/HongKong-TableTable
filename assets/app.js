@@ -152,6 +152,15 @@ const FEMALE_CHARS = new Set(
   "晴婷欣怡詩韻瑤琳慧敏靜芳麗美娟玲燕霞蓉君萍紅玉蘭鳳珍珠秀梅薇萱穎彤妮娜珊琪瑩璇蕾兒雯雪月心語恩雅琳瑩".split("")
 );
 
+const BADGE_FILTERS = [
+  { id: "d2", label: "鑽章（二）" },
+  { id: "d", label: "鑽章" },
+  { id: "p", label: "白金章" },
+  { id: "g", label: "金章" },
+  { id: "s", label: "銀章" },
+  { id: "b", label: "銅章" },
+];
+
 const FILTERS = [
   { group: "gender", id: "M", label: "男" },
   { group: "gender", id: "F", label: "女" },
@@ -162,7 +171,9 @@ const FILTERS = [
   { group: "bucket", id: "hktta-e", label: "乒總戊組" },
   { group: "bucket", id: "lcsd-only", label: "只有康文署比賽" },
   { group: "extra", id: "has-lcsd", label: "有康文署紀錄" },
+  { group: "extra", id: "has-badge", label: "有恒生章別紀錄" },
   { group: "bucket", id: "none", label: "完全沒有任何紀錄" },
+  ...BADGE_FILTERS.map((b) => ({ group: "badge", id: b.id, label: b.label })),
   ...AGE_BANDS.map((b) => ({ group: "age", id: b.id, label: b.label })),
 ];
 
@@ -558,6 +569,17 @@ function lcsdKindLabel(kind) {
   return kind || "文件";
 }
 
+function badgeId(label) {
+  const text = String(label || "");
+  if (text.includes("鑽章（二）") || text.includes("鑽章(二)")) return "d2";
+  if (text.includes("鑽")) return "d";
+  if (text.includes("白金")) return "p";
+  if (text.includes("金")) return "g";
+  if (text.includes("銀")) return "s";
+  if (text.includes("銅")) return "b";
+  return "";
+}
+
 function badgeRank(label) {
   if (label.includes("鑽章（二）") || label.includes("鑽章(二)")) return 6;
   if (label.includes("鑽")) return 5;
@@ -576,6 +598,11 @@ function bestBadge(records) {
     if (rank) return rank;
     return String(b.session).localeCompare(String(a.session));
   })[0] || null;
+}
+
+function itemBadgeId(item) {
+  const best = bestBadge(item.badges || []);
+  return best ? badgeId(best.badge) : "";
 }
 
 function badgeChip(item) {
@@ -719,12 +746,15 @@ function passesFilter(item) {
   const genders = selectedFilters("gender");
   const buckets = selectedFilters("bucket");
   const ages = selectedFilters("age");
+  const badges = selectedFilters("badge");
   const extras = selectedFilters("extra");
   const gender = inferGender(item).gender;
   if (genders.length && !genders.includes(gender)) return false;
   if (buckets.length && !buckets.includes(classify(item))) return false;
   if (ages.length && !ages.includes(ageBand(item))) return false;
+  if (badges.length && !badges.includes(itemBadgeId(item))) return false;
   if (extras.includes("has-lcsd") && !item.lcsd.length) return false;
+  if (extras.includes("has-badge") && !(item.badges || []).length) return false;
   return true;
 }
 
@@ -738,8 +768,14 @@ function filterHasPeople(filter, results) {
   if (filter.group === "age") {
     return results.some((item) => ageBand(item) === filter.id);
   }
+  if (filter.group === "badge") {
+    return results.some((item) => itemBadgeId(item) === filter.id);
+  }
   if (filter.id === "has-lcsd") {
     return results.some((item) => item.lcsd.length);
+  }
+  if (filter.id === "has-badge") {
+    return results.some((item) => (item.badges || []).length);
   }
   return true;
 }
