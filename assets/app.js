@@ -275,32 +275,44 @@ function ageRank(id) {
   return idx < 0 ? 99 : idx;
 }
 
-function olderBand(a, b) {
-  if (!a) return b;
-  if (!b) return a;
-  return ageRank(a) <= ageRank(b) ? a : b;
+function recYear(rec) {
+  const year = Number.parseInt(rec.year, 10);
+  return Number.isFinite(year) ? year : 0;
+}
+
+function latestLcsdYear(item) {
+  return item.lcsd.reduce((max, rec) => Math.max(max, recYear(rec)), 0);
 }
 
 function lcsdAgeFromItem(item) {
-  let band = "";
-  let code = "";
-  for (const rec of item.lcsd) {
-    const group = String(rec.group || "").toUpperCase();
-    const mapped = LCSD_AGE[group];
-    if (!mapped) continue;
-    if (!band || ageRank(mapped) < ageRank(band)) {
-      band = mapped;
-      code = group;
+  const records = [...item.lcsd].sort((a, b) => recYear(b) - recYear(a));
+  const latestYear = recYear(records[0] || {});
+  const pick = (list) => {
+    let band = "";
+    let code = "";
+    let year = 0;
+    for (const rec of list) {
+      const group = String(rec.group || "").toUpperCase();
+      const mapped = LCSD_AGE[group];
+      if (!mapped) continue;
+      if (!band || ageRank(mapped) < ageRank(band)) {
+        band = mapped;
+        code = group;
+        year = recYear(rec);
+      }
     }
-  }
-  return { band, code };
+    return { band, code, year };
+  };
+  const fromLatest = pick(records.filter((rec) => recYear(rec) === latestYear));
+  if (fromLatest.band) return fromLatest;
+  return pick(records);
 }
 
 function ageBand(item) {
   const lcsd = lcsdAgeFromItem(item);
   const hktta = HKTTA_AGE[item.matches[0]?.age?.youngestGroup] || "";
-  if (lcsd.band && hktta) return olderBand(lcsd.band, hktta);
-  return lcsd.band || hktta || "";
+  if (lcsd.band) return lcsd.band;
+  return hktta || "";
 }
 
 function ageBadge(item) {
@@ -308,8 +320,11 @@ function ageBadge(item) {
   const band = AGE_BANDS.find((b) => b.id === id);
   if (!band) return "";
   const lcsd = lcsdAgeFromItem(item);
-  const text = lcsd.code ? `${band.label}（${lcsd.code}）` : band.label;
-  return `<span class="badge ok">${escapeHtml(text)}</span>`;
+  if (!lcsd.code) return `<span class="badge ok">${escapeHtml(band.label)}</span>`;
+  const latestYear = latestLcsdYear(item);
+  const showYear = lcsd.year && (lcsd.year !== latestYear || lcsd.year < new Date().getFullYear());
+  const extra = showYear ? `${lcsd.code} · ${lcsd.year}` : lcsd.code;
+  return `<span class="badge ok">${escapeHtml(`${band.label}（${extra}）`)}</span>`;
 }
 
 function searchLinks(name) {
@@ -356,7 +371,8 @@ function lcsdKindLabel(kind) {
 
 function renderLcsd(records) {
   if (!records.length) return "";
-  const items = records
+  const items = [...records]
+    .sort((a, b) => recYear(b) - recYear(a))
     .map((r) => {
       const bits = [r.district, r.year, lcsdKindLabel(r.kind), r.group].filter(Boolean);
       return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a></li>`;
@@ -553,9 +569,15 @@ function renderResults() {
 
   const filtered = lastResults.filter(passesFilter);
   const mode = sortMode();
-  const sorted = filtered.map((item, idx) => ({ item, listIndex: lastResults.indexOf(item) }));
+  const sorted = filtered.map((item) => ({ item, listIndex: lastResults.indexOf(item) }));
   if (mode === "rank") {
     sorted.sort((a, b) => compareByListRank(a.item, b.item));
+  } else {
+    sorted.sort((a, b) => {
+      const dataDiff = Number(hasRecord(b.item)) - Number(hasRecord(a.item));
+      if (dataDiff) return dataDiff;
+      return a.listIndex - b.listIndex;
+    });
   }
 
   const strengthOrder = [...lastResults]
