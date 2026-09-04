@@ -1,0 +1,37 @@
+[
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/2_sch_b5_EDAG_Table_Tennis_Competition_2023___Competition_Schedule.pdf",
+    "district": "東區",
+    "year": "2023",
+    "kind": "schedule",
+    "event": "東區分齡乒乓球比賽 2023"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/18_res_b5_kt_Table_Tennis_2024_Result.pdf",
+    "district": "觀塘",
+    "year": "2024",
+    "kind": "result",
+    "event": "觀塘區分齡乒乓球比賽 2024"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/24_res_b5_Name_List_of_the_winner_2022_23.pdf",
+    "district": "屯門",
+    "year": "2022",
+    "kind": "result",
+    "event": "屯門區分齡乒乓球比賽 2022/23"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/20_sch_b5_Table-Tennis_Sha_Tin_2025.pdf",
+    "district": "沙田",
+    "year": "2025",
+    "kind": "schedule",
+    "event": "沙田區分齡乒乓球比賽 2025"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/en/8_res_en_resultsSouthern.pdf",
+    "district": "南區",
+    "year": "2025",
+    "kind": "result",
+    "event": "南區分齡乒乓球比賽 2025"
+  }
+]

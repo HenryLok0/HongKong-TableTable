@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>香港乒乓球排名查詢</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+
+<body>
+  <header class="hero">
+    <p class="eyebrow">Hong Kong Table Tennis</p>
+    <h1>香港乒乓球排名查詢</h1>
+    <p class="lede">
+      貼上球員名單，對照中國香港乒乓總會已公布嘅電腦積分及年齡組排名榜，估計年齡組，並提供總會／康文署／公開搜尋連結。
+    </p>
+    <p id="data-meta" class="meta">載入排名資料中…</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <label for="names">球員名單</label>
+      <textarea id="names" rows="16" placeholder="&#10;"></textarea>
+      <div class="actions">
+        <button id="search-btn" type="button">查詢名單</button>
+        <button id="clear-btn" type="button" class="ghost">清空</button>
+      </div>
+      <p class="hint">
+        GitHub Pages 唔能夠即時爬網站。乒總用排名榜快照；康文署用
+        <a href="https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do" target="_blank" rel="noreferrer">地區分齡比賽頁</a>
+        嘅賽程表／成績 PDF（活動種類揀「乒乓球」）。連結每年會換檔名，舊檔要另外收錄先睇到，例如東區 2023 賽程。
+      </p>
+    </section>
+
+    <section id="summary" class="summary hidden"></section>
+    <section id="breakdown" class="breakdown hidden"></section>
+    <section id="results" class="results"></section>
+  </main>
+
+  <footer>
+    排名來源：
+    <a href="https://www.hktta.org.hk/registered_player/past_record/index.html" target="_blank"
+      rel="noreferrer">中國香港乒乓總會註冊球員電腦積分及排名榜</a>
+    。年齡按出生年份組別推斷，並非身份證年齡。康文署紀錄來自
+    <a href="https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do" target="_blank" rel="noreferrer">地區分齡比賽</a>
+    已公布嘅賽程／成績 PDF，並非完整歷史庫。
+  </footer>
+
+  <form id="hktta-search" class="hidden" method="post" action="https://hktta.org.hk/cgi-bin/display/member_search.cgi"
+    enctype="multipart/form-data" target="_blank">
+    <input type="text" name="eng_surname" value="" />
+    <input type="text" name="eng_given_name" value="" />
+    <input type="text" name="chi_name" id="hktta-chi-name" value="" />
+    <input type="hidden" name="page" value="" />
+    <input type="hidden" name="order" value="RME_SURNAME,RME_GIVEN_NAME" />
+    <input type="hidden" name="seq" value="ASC" />
+    <input type="hidden" name="error" value="" />
+  </form>
+
+  <script src="assets/app.js"></script>
+</body>
+
+</html>

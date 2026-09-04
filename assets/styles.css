@@ -1,0 +1,302 @@
+:root {
+  --bg: #f4efe6;
+  --ink: #1c2430;
+  --muted: #5b6573;
+  --card: #fffdf8;
+  --line: #ddd4c6;
+  --accent: #d85a1a;
+  --navy: #16324f;
+  --ok: #1f6b4a;
+  --warn: #8a5a12;
+  --miss: #8a3b3b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% -10%, #ffe2c8 0, transparent 32%),
+    linear-gradient(180deg, #f7f2ea 0%, var(--bg) 100%);
+  font-family: "Noto Sans TC", sans-serif;
+  line-height: 1.55;
+}
+
+.hero,
+main,
+footer {
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.hero {
+  padding: 48px 0 12px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0;
+  font-family: "Noto Serif TC", serif;
+  font-size: clamp(28px, 5vw, 44px);
+  color: var(--navy);
+}
+
+.lede,
+.meta,
+.hint,
+footer {
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(22, 50, 79, 0.06);
+}
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+button {
+  appearance: none;
+  border: 0;
+  background: var(--navy);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--navy);
+  border: 1px solid var(--line);
+}
+
+.hint {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.summary {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.stat b {
+  display: block;
+  font-size: 28px;
+  color: var(--navy);
+  line-height: 1.2;
+}
+
+.breakdown {
+  margin-top: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+.breakdown h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--navy);
+}
+
+.bucket-list {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.card.lcsd {
+  border-color: #c9d9c4;
+  background: #f7fbf5;
+}
+
+.lcsd-box {
+  margin-top: 12px;
+}
+
+.lcsd-box span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lcsd-box ul {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+}
+
+.results {
+  margin: 20px 0 48px;
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+.card.missing {
+  border-color: #e4c7c7;
+  background: #fff8f8;
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge.m {
+  background: #e8eef6;
+  color: var(--navy);
+}
+
+.badge.f {
+  background: #f8e8ee;
+  color: #7a2e4a;
+}
+
+.badge.ok {
+  background: #e5f4ec;
+  color: var(--ok);
+}
+
+.badge.miss {
+  background: #f8e6e6;
+  color: var(--miss);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+
+.grid div span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ranks {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rank-chip {
+  background: #f3eee4;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.links {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.links a,
+.links button.linkish {
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+footer {
+  padding: 0 0 40px;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .summary,
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .summary,
+  .grid,
+  .card-top {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}
