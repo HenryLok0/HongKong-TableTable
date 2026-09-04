@@ -303,6 +303,47 @@ function bytesToNames(bytes) {
   return parseNames(text);
 }
 
+function alphabetPack(names) {
+  const unique = [...new Set(names.join(""))];
+  if (!unique.length || unique.length > 254) return null;
+  const index = new Map(unique.map((ch, i) => [ch, i]));
+  const bytes = [unique.length];
+  for (const ch of unique) {
+    const code = ch.charCodeAt(0);
+    bytes.push(code >> 8, code & 255);
+  }
+  names.forEach((name, i) => {
+    if (i) bytes.push(255);
+    for (const ch of name) bytes.push(index.get(ch));
+  });
+  return Uint8Array.from(bytes);
+}
+
+function alphabetUnpack(bytes) {
+  if (!bytes.length) return [];
+  const count = bytes[0];
+  let offset = 1;
+  const alphabet = [];
+  for (let i = 0; i < count; i += 1) {
+    if (offset + 1 >= bytes.length) return [];
+    alphabet.push(String.fromCharCode((bytes[offset] << 8) | bytes[offset + 1]));
+    offset += 2;
+  }
+  const names = [];
+  let current = "";
+  for (; offset < bytes.length; offset += 1) {
+    const value = bytes[offset];
+    if (value === 255) {
+      names.push(current);
+      current = "";
+      continue;
+    }
+    current += alphabet[value] || "";
+  }
+  if (current) names.push(current);
+  return parseNames(names.join("\n"));
+}
+
 async function deflateRaw(bytes) {
   const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -314,17 +355,20 @@ async function inflateRaw(bytes) {
 }
 
 async function encodeSharePayload(names) {
-  const raw = namesToBytes(names);
-  let best = "1" + toBase64Url(raw);
+  const candidates = ["1" + toBase64Url(namesToBytes(names))];
+  const packed = alphabetPack(names);
+  if (packed) candidates.push("3" + toBase64Url(packed));
   if (typeof CompressionStream === "function") {
-    try {
-      const packed = "2" + toBase64Url(await deflateRaw(raw));
-      if (packed.length < best.length) best = packed;
-    } catch {
-      // Keep the uncompressed payload.
+    for (const [kind, bytes] of [["2", namesToBytes(names)], ["4", packed]]) {
+      if (!bytes) continue;
+      try {
+        candidates.push(kind + toBase64Url(await deflateRaw(bytes)));
+      } catch {
+        // Skip this variant.
+      }
     }
   }
-  return best;
+  return candidates.reduce((best, token) => (token.length < best.length ? token : best));
 }
 
 async function decodeSharePayload(token) {
@@ -332,6 +376,8 @@ async function decodeSharePayload(token) {
   try {
     const kind = token[0];
     const bytes = fromBase64Url(token.slice(1));
+    if (kind === "3") return alphabetUnpack(bytes);
+    if (kind === "4") return alphabetUnpack(await inflateRaw(bytes));
     const raw = kind === "2" ? await inflateRaw(bytes) : bytes;
     return bytesToNames(raw);
   } catch {
@@ -416,14 +462,56 @@ function formatRank(player) {
   if (!all) return "今期總榜未見";
   const label = player.gender === "F" ? "女子" : "男子";
   const points = playerPoints(player);
+  const move = rankMoveText(all.rank, all.prev);
   if (points < 1) {
-    return `${label}官方第 ${all.rank}（0分，不計入有積分排名）`;
+    return `${label}官方第 ${all.rank}${move}（0分，不計入有積分排名）`;
   }
   const rank = player.scoredRank || all.rank;
   const total = player.scoredTotal;
-  if (!total) return `${label}第 ${rank}`;
+  if (!total) return `${label}第 ${rank}${move}`;
   const pct = Math.max(0, Math.round((1 - rank / total) * 1000) / 10);
-  return `${label}第 ${rank} / ${total}（約高於 ${pct}% 有積分球員）`;
+  return `${label}第 ${rank} / ${total}${move}（約高於 ${pct}% 有積分球員）`;
+}
+
+function rankMoveText(now, prev) {
+  if (typeof now !== "number" || typeof prev !== "number") return "";
+  const diff = prev - now;
+  if (diff > 0) return `（↑${diff}）`;
+  if (diff < 0) return `（↓${Math.abs(diff)}）`;
+  return "（→）";
+}
+
+function rankMoveClass(now, prev) {
+  if (typeof now !== "number" || typeof prev !== "number") return "";
+  const diff = prev - now;
+  if (diff > 0) return "delta-up";
+  if (diff < 0) return "delta-down";
+  return "delta-same";
+}
+
+function priorAll(player) {
+  return snapshot.prior?.all?.[`${player.gender}|${player.name}|${player.club || ""}|${player.school || ""}`] || null;
+}
+
+function changeCell(player) {
+  const all = overall(player);
+  const bits = [];
+  if (all && typeof all.rank === "number" && typeof all.prev === "number") {
+    const diff = all.prev - all.rank;
+    const cls = rankMoveClass(all.rank, all.prev);
+    const label = diff > 0 ? `排名 ↑${diff}` : diff < 0 ? `排名 ↓${Math.abs(diff)}` : "排名 →";
+    bits.push(`<span class="${cls}">${label}</span><span class="muted"> 上期第 ${all.prev}</span>`);
+  }
+  const prior = priorAll(player);
+  const nowPts = player.points ?? all?.points;
+  if (prior && typeof prior.points === "number" && typeof nowPts === "number") {
+    const diff = nowPts - prior.points;
+    const cls = diff > 0 ? "delta-up" : diff < 0 ? "delta-down" : "delta-same";
+    const label = diff > 0 ? `積分 +${diff}` : diff < 0 ? `積分 ${diff}` : "積分 →";
+    bits.push(`<span class="${cls}">${label}</span><span class="muted"> 上期 ${prior.points}</span>`);
+  }
+  if (!bits.length) return "";
+  return `<div><span>上期升跌</span><b>${bits.join("<br>")}</b></div>`;
 }
 
 function levelText(player) {
@@ -714,7 +802,11 @@ function rankChips(player) {
     .map((g) => {
       const row = player.rankings[g];
       const label = g === "ALL" ? "全港" : g;
-      return `<span class="rank-chip">${label} 第 ${row.rank}${row.points != null ? ` · ${row.points}分` : ""}</span>`;
+      const move = rankMoveText(row.rank, row.prev);
+      const cls = rankMoveClass(row.rank, row.prev);
+      return `<span class="rank-chip">${label} 第 ${row.rank}${
+        move ? `<span class="${cls}">${move}</span>` : ""
+      }${row.points != null ? ` · ${row.points}分` : ""}</span>`;
     })
     .join("");
 }
@@ -870,6 +962,7 @@ function renderCard(item, totals, orderLabel) {
         <div class="grid">
           <div><span>乒總積分</span><b>${player.points ?? all?.points ?? "—"}</b></div>
           <div><span>全港排名</span><b>${formatRank(player)}</b></div>
+          ${changeCell(player)}
           <div><span>教練／球會／學校</span><b>${escapeHtml([player.coach, player.club, player.school].filter(Boolean).join(" · ") || "榜上未列")}</b></div>
         </div>
         <p>${levelText(player)}</p>
@@ -1201,7 +1294,7 @@ function hasStoredTheme() {
   return Object.prototype.hasOwnProperty.call(loadSettings(), "dark");
 }
 
-const EXPORT_HEADERS = ["姓名", "組別", "全港排名", "積分", "恒生章別"];
+const EXPORT_HEADERS = ["姓名", "組別", "全港排名", "排名升跌", "積分", "積分升跌", "恒生章別"];
 
 function exportBadgeLabel(item) {
   const best = bestBadge(item.badges || []);
@@ -1209,15 +1302,37 @@ function exportBadgeLabel(item) {
   return best.passed ? best.badge : `報考${best.badge}`;
 }
 
+function exportMove(item) {
+  const player = item.matches[0];
+  if (!player) return { rank: "", points: "" };
+  const all = overall(player);
+  let rank = "";
+  if (all && typeof all.rank === "number" && typeof all.prev === "number") {
+    const diff = all.prev - all.rank;
+    rank = diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "→";
+  }
+  const prior = priorAll(player);
+  const nowPts = player.points ?? all?.points;
+  let points = "";
+  if (prior && typeof prior.points === "number" && typeof nowPts === "number") {
+    const diff = nowPts - prior.points;
+    points = diff > 0 ? `+${diff}` : diff < 0 ? String(diff) : "→";
+  }
+  return { rank, points };
+}
+
 function exportRows(items) {
   return items.map((item) => {
     const rank = bestRank(item);
     const points = bestPoints(item.matches);
+    const move = exportMove(item);
     return [
       item.query,
       divisionLabel(classify(item)),
       rank < 9e9 ? String(rank) : "",
+      move.rank,
       points < 0 ? "" : String(points),
+      move.points,
       exportBadgeLabel(item),
     ];
   });
@@ -1316,7 +1431,9 @@ async function boot() {
     indexLcsdDocCodes();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
     const badgeCount = Object.keys(badgeIndex.players || {}).length;
-    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名 · 恒生章別 ${badgeCount} 人`;
+    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名 · 恒生章別 ${badgeCount} 人${
+      snapshot.prior?.period ? ` · 積分對照 ${snapshot.prior.period}` : ""
+    }`;
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
     console.error(err);

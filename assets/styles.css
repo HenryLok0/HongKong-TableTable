@@ -582,6 +582,20 @@ button.ghost {
   font-size: 13px;
 }
 
+.delta-up {
+  color: var(--ok);
+}
+
+.delta-down {
+  color: var(--miss);
+}
+
+.delta-same,
+.grid .muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .links {
   margin-top: 12px;
   display: flex;

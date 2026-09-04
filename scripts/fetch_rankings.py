@@ -228,9 +228,86 @@ def merge_players(rows_by_list: dict[str, list[dict]]) -> list[dict]:
     return players
 
 
+def load_existing() -> dict | None:
+    if not OUT_PATH.exists():
+        return None
+    try:
+        return json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def player_stable_key(player: dict) -> str:
+    return "|".join(
+        [
+            str(player.get("gender") or ""),
+            str(player.get("name") or ""),
+            str(player.get("club") or ""),
+            str(player.get("school") or ""),
+        ]
+    )
+
+
+def prior_from_snapshot(old: dict) -> dict:
+    all_map: dict[str, dict] = {}
+    for player in old.get("players") or []:
+        row = (player.get("rankings") or {}).get("ALL")
+        if not row:
+            continue
+        points = row.get("points")
+        if points is None:
+            points = player.get("points")
+        all_map[player_stable_key(player)] = {
+            "rank": row.get("rank"),
+            "points": points,
+        }
+    return {"period": old.get("period"), "all": all_map}
+
+
+def previous_period(period: str) -> str:
+    year, num = period.split("-")
+    year_n = int(year)
+    num_n = int(num)
+    if num_n > 1:
+        return f"{year_n}-{num_n - 1:02d}"
+    return f"{year_n - 1}-12"
+
+
+def prior_from_all_pdfs(tmp_dir: Path, period: str) -> dict | None:
+    all_map: dict[str, dict] = {}
+    for filename, gender in (("Men-All", "M"), ("Women-All", "F")):
+        url = f"{BASE}/{period}/{filename}.pdf"
+        code, body = http_get(url)
+        if code != 200 or not body.startswith(b"%PDF"):
+            print(f"prior missing {filename} ({code})")
+            continue
+        pdf_path = tmp_dir / f"prior-{filename}.pdf"
+        pdf_path.write_bytes(body)
+        _printed, rows = parse_pdf(pdf_path, gender, "ALL")
+        print(f"prior parsed {filename}: {len(rows)} players")
+        for row in rows:
+            all_map[player_stable_key(row)] = {
+                "rank": row.get("rank"),
+                "points": row.get("points"),
+            }
+    if not all_map:
+        return None
+    return {"period": period, "all": all_map}
+
+
+def resolve_prior(old: dict | None, period: str) -> dict | None:
+    if not old:
+        return None
+    old_period = old.get("period")
+    if old_period and old_period != period:
+        return prior_from_snapshot(old)
+    return old.get("prior")
+
+
 def main() -> None:
     import pdfplumber  # noqa: F401  # fail fast if missing
 
+    old = load_existing()
     period = find_latest_period()
     print(f"using period {period}")
     rows_by_list: dict[str, list[dict]] = {}
@@ -251,8 +328,10 @@ def main() -> None:
             rows_by_list[filename] = rows
             totals[f"{gender}-{group}"] = len(rows)
             print(f"parsed {filename}: {len(rows)} players")
+        prior_pdf = prior_from_all_pdfs(tmp_dir, previous_period(period))
 
     players = merge_players(rows_by_list)
+    prior = prior_pdf or resolve_prior(old, period)
     payload = {
         "source": "中國香港乒乓總會註冊球員電腦積分及排名榜（PDF）",
         "sourceUrl": "https://www.hktta.org.hk/registered_player/past_record/index.html",
@@ -262,6 +341,8 @@ def main() -> None:
         "totals": totals,
         "players": players,
     }
+    if prior:
+        payload["prior"] = prior
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size} bytes, {len(players)} unique players)")
