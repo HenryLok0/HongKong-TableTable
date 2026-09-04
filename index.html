@@ -14,6 +14,20 @@
 </head>
 
 <body>
+  <div class="settings">
+    <button id="settings-btn" type="button" class="ghost">設定</button>
+    <div id="settings-panel" class="settings-panel hidden" role="menu">
+      <label class="setting-row">
+        <input type="checkbox" id="theme-toggle" />
+        黑白模式
+      </label>
+      <label class="setting-row">
+        <input type="checkbox" id="guess-gender" />
+        男女名字估計
+      </label>
+      <p class="hint">冇乒總／康文署性別紀錄時，用名字用字估計，並非官方資料。</p>
+    </div>
+  </div>
   <header class="hero">
     <p class="eyebrow">Hong Kong Table Tennis</p>
     <h1>香港乒乓球排名查詢</h1>
@@ -39,7 +53,34 @@
     </section>
 
     <section id="summary" class="summary hidden"></section>
-    <section id="breakdown" class="breakdown hidden"></section>
+    <section id="breakdown" class="breakdown hidden">
+      <div class="breakdown-grid">
+        <div>
+          <h2>名單組別</h2>
+          <ul id="bucket-list" class="bucket-list"></ul>
+        </div>
+        <div>
+          <h2>年齡組別</h2>
+          <ul id="age-list" class="bucket-list"></ul>
+        </div>
+      </div>
+      <p class="hint">
+        甲至戊組按今期乒總全港排名，對照
+        <a href="https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryForm/2026RankingProspectus.pdf" target="_blank" rel="noreferrer">2026 全港公開排名錦標賽章程</a>
+        。女子冇戊組，第 301 名或以後算丁組。年齡由乒總年齡榜同康文署組別編號推斷，推唔到嘅唔會計入。冇人嘅組別唔會顯示。
+      </p>
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <span class="toolbar-label">排序</span>
+          <label class="choice"><input type="radio" name="sort-mode" value="list" checked /> 按照球員名單排名</label>
+          <label class="choice"><input type="radio" name="sort-mode" value="rank" /> 名單內排名</label>
+        </div>
+        <div class="toolbar-row">
+          <span class="toolbar-label">篩選</span>
+          <div id="filter-box" class="filter-box"></div>
+        </div>
+      </div>
+    </section>
     <section id="results" class="results"></section>
   </main>
 
