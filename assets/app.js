@@ -459,9 +459,18 @@ function divisionLabel(id) {
 
 function findMatches(query, players) {
   const key = normalizeName(query);
-  const exact = players.filter((p) => normalizeName(p.name) === key);
-  if (exact.length) return exact;
-  return players.filter((p) => normalizeName(p.name).includes(key) && key.length >= 2);
+  return players.filter((p) => normalizeName(p.name) === key);
+}
+
+function findPossible(query, players) {
+  const key = normalizeName(query);
+  if (key.length < 2) return [];
+  return players
+    .filter((p) => {
+      const name = normalizeName(p.name);
+      return name !== key && name.includes(key);
+    })
+    .slice(0, 8);
 }
 
 function findLcsd(query) {
@@ -828,14 +837,14 @@ function renderCard(item, totals, orderLabel) {
         <div>${escapeHtml(orderLabel)}</div>
       </div>
       <p>${item.lcsd.length
-        ? "今期乒總公布榜未見，但康文署分齡賽程／成績 PDF 有呢個名。"
+        ? "今期乒總公布榜未見精確姓名，但康文署分齡賽程／成績 PDF 有呢個名。"
         : (item.badges || []).length
-          ? "今期乒總公布榜未見，但恒生公開章別考試時間表有呢個名。"
-          : "今期乒總公布榜同已收入嘅康文署 PDF 都未見。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。"}</p>
+          ? "今期乒總公布榜未見精確姓名，但恒生公開章別考試時間表有呢個名。"
+          : "今期乒總公布榜未見精確姓名。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。"}</p>
       ${lcsdHtml}
       ${badgeHtml}
       <div class="links">${renderLinks(item.query)}</div>
-    </article>`;
+    </article>${renderPossibleCards(item)}`;
   }
 
   return item.matches
@@ -867,6 +876,32 @@ function renderCard(item, totals, orderLabel) {
       </article>`;
     })
     .join("");
+}
+
+function renderPossibleCards(item) {
+  const possible = item.possible || [];
+  if (item.matches.length || !possible.length) return "";
+  const cards = possible.map((player) => {
+    const fake = { query: player.name, matches: [player], lcsd: [], badges: [] };
+    const all = overall(player);
+    const division = hkttaDivision(player) || "none";
+    return `<article class="card possible">
+      <div class="card-top">
+        <div>
+          <h2><button type="button" class="name-link" data-hktta="${escapeHtml(player.name)}">${escapeHtml(player.name)}</button></h2>
+          <span class="badge miss">可能係其他人</span>
+          ${genderBadge(fake)}
+          <span class="badge ${bucketTone(division)}">${escapeHtml(divisionLabel(division))}</span>
+        </div>
+      </div>
+      <p>乒總榜上有包含「${escapeHtml(item.query)}」嘅姓名，唔會計入上面名單統計。</p>
+      <div class="grid">
+        <div><span>乒總積分</span><b>${player.points ?? all?.points ?? "—"}</b></div>
+        <div><span>全港排名</span><b>${formatRank(player)}</b></div>
+      </div>
+    </article>`;
+  }).join("");
+  return `<p class="hint">以下 ${possible.length} 個相似姓名可能係其他人：</p>${cards}`;
 }
 
 function bestPoints(matches) {
@@ -1111,6 +1146,7 @@ function renderResults() {
       return renderCard(item, snapshot.totals, label);
     })
     .join("") || `<p class="hint">呢組篩選冇符合嘅球員。</p>`;
+  fillExportTable(sorted.map(({ item }) => item));
   const status = document.getElementById("filter-status");
   if (status) {
     status.textContent = filtered.length === lastResults.length
@@ -1131,15 +1167,20 @@ async function runSearch() {
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");
     document.getElementById("results").innerHTML = "";
+    fillExportTable([]);
     syncShareUrl([]).catch(() => {});
     return;
   }
-  lastResults = names.map((query) => ({
-    query,
-    matches: findMatches(query, snapshot.players),
-    lcsd: findLcsd(query),
-    badges: findBadges(query),
-  }));
+  lastResults = names.map((query) => {
+    const matches = findMatches(query, snapshot.players);
+    return {
+      query,
+      matches,
+      possible: matches.length ? [] : findPossible(query, snapshot.players),
+      lcsd: findLcsd(query),
+      badges: findBadges(query),
+    };
+  });
   renderResults();
   syncShareUrl(names).catch(() => {});
 }
@@ -1148,13 +1189,89 @@ function applyTheme(dark) {
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
 }
 
+function prefersDark() {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function hasStoredTheme() {
+  return Object.prototype.hasOwnProperty.call(loadSettings(), "dark");
+}
+
+const EXPORT_HEADERS = ["姓名", "組別", "全港排名", "積分", "恒生章別"];
+
+function exportBadgeLabel(item) {
+  const best = bestBadge(item.badges || []);
+  if (!best) return "";
+  return best.passed ? best.badge : `報考${best.badge}`;
+}
+
+function exportRows(items) {
+  return items.map((item) => {
+    const rank = bestRank(item);
+    const points = bestPoints(item.matches);
+    return [
+      item.query,
+      divisionLabel(classify(item)),
+      rank < 9e9 ? String(rank) : "",
+      points < 0 ? "" : String(points),
+      exportBadgeLabel(item),
+    ];
+  });
+}
+
+function fillExportTable(items) {
+  const table = document.getElementById("export-print");
+  if (!table) return;
+  const rows = exportRows(items);
+  table.innerHTML = `<thead><tr>${EXPORT_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${
+    rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell || "—")}</td>`).join("")}</tr>`).join("")
+  }</tbody>`;
+}
+
+function setExportStatus(text) {
+  const el = document.getElementById("export-status");
+  if (el) el.textContent = text || "";
+}
+
+async function copyResultsTable() {
+  const items = lastResults.filter(passesFilter);
+  if (!items.length) {
+    setExportStatus("冇結果可以複製。");
+    return;
+  }
+  const text = [EXPORT_HEADERS, ...exportRows(items)].map((row) => row.join("\t")).join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    setExportStatus("已複製表格，可貼去 Excel／試算表。");
+  } catch {
+    setExportStatus("複製失敗，請改用列印。");
+  }
+}
+
+function printResultsTable() {
+  const items = lastResults.filter(passesFilter);
+  if (!items.length) {
+    setExportStatus("冇結果可以列印。");
+    return;
+  }
+  fillExportTable(items);
+  window.print();
+}
+
 function bootSettings() {
   const saved = loadSettings();
   const themeEl = document.getElementById("theme-toggle");
   const guessEl = document.getElementById("guess-gender");
-  themeEl.checked = Boolean(saved.dark);
+  const dark = hasStoredTheme() ? Boolean(saved.dark) : prefersDark();
+  themeEl.checked = dark;
   guessEl.checked = Boolean(saved.guessGender);
-  applyTheme(themeEl.checked);
+  applyTheme(dark);
+
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
+    if (hasStoredTheme()) return;
+    themeEl.checked = event.matches;
+    applyTheme(event.matches);
+  });
 
   document.getElementById("settings-btn").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1209,10 +1326,14 @@ async function boot() {
 
   document.getElementById("search-btn").addEventListener("click", runSearch);
   document.getElementById("share-btn")?.addEventListener("click", copyShareLink);
+  document.getElementById("copy-table-btn")?.addEventListener("click", copyResultsTable);
+  document.getElementById("print-btn")?.addEventListener("click", printResultsTable);
   document.getElementById("clear-btn").addEventListener("click", () => {
     document.getElementById("names").value = "";
     lastResults = [];
     setShareStatus("");
+    setExportStatus("");
+    fillExportTable([]);
     syncShareUrl([]);
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");

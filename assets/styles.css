@@ -279,6 +279,14 @@ button.ghost {
   margin-top: 10px;
 }
 
+.toolbar-row .hint {
+  margin: 0;
+}
+
+.export-print {
+  display: none;
+}
+
 .toolbar-filters {
   align-items: flex-start;
 }
@@ -418,6 +426,16 @@ button.ghost {
 .card.lcsd {
   border-color: #c9d9c4;
   background: #f7fbf5;
+}
+
+.card.possible {
+  border-color: #e2c48a;
+  background: #fff8e8;
+}
+
+[data-theme="dark"] .card.possible {
+  background: #2a2418;
+  border-color: #6a5428;
 }
 
 .lcsd-box {
@@ -610,5 +628,36 @@ footer {
   .filter-group {
     flex-direction: column;
     gap: 6px;
+  }
+}
+
+@media print {
+  .settings,
+  .hero,
+  .panel,
+  .summary,
+  .breakdown,
+  .results,
+  footer {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #111;
+  }
+
+  .export-print {
+    display: table !important;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .export-print th,
+  .export-print td {
+    border: 1px solid #333;
+    padding: 6px 8px;
+    text-align: left;
   }
 }

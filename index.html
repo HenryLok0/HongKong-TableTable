@@ -5,12 +5,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>香港乒乓球排名查詢</title>
+  <meta name="description" content="貼上球員名單，對照乒總電腦積分及排名、康文署分齡紀錄同恒生公開章別考試。" />
+  <link rel="canonical" href="https://henrylok0.github.io/HongKong-TableTable/" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="zh_HK" />
+  <meta property="og:site_name" content="香港乒乓球排名查詢" />
+  <meta property="og:title" content="香港乒乓球排名查詢" />
+  <meta property="og:description" content="貼上球員名單，對照乒總電腦積分及排名、康文署分齡紀錄同恒生公開章別考試。" />
+  <meta property="og:url" content="https://henrylok0.github.io/HongKong-TableTable/" />
+  <meta property="og:image" content="https://henrylok0.github.io/HongKong-TableTable/assets/og.png" />
+  <meta property="og:image:alt" content="香港乒乓球排名查詢" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="香港乒乓球排名查詢" />
+  <meta name="twitter:description" content="貼上球員名單，對照乒總電腦積分及排名、康文署分齡紀錄同恒生公開章別考試。" />
+  <meta name="twitter:image" content="https://henrylok0.github.io/HongKong-TableTable/assets/og.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="stylesheet" href="assets/styles.css?v=20260905a" />
 </head>
 
 <body>
@@ -21,6 +36,7 @@
         <input type="checkbox" id="theme-toggle" />
         黑白模式
       </label>
+      <p class="hint">未手動揀過會跟系統。揀咗之後先記住你嘅選擇。</p>
       <label class="setting-row">
         <input type="checkbox" id="guess-gender" />
         男女名字估計
@@ -78,6 +94,12 @@
           <label class="choice"><input type="radio" name="sort-mode" value="list" /> 按照球員名單排名</label>
           <label class="choice"><input type="radio" name="sort-mode" value="rank" checked /> 名單內排名</label>
         </div>
+        <div class="toolbar-row">
+          <span class="toolbar-label">匯出</span>
+          <button id="copy-table-btn" type="button" class="ghost">複製表格</button>
+          <button id="print-btn" type="button" class="ghost">列印</button>
+          <span id="export-status" class="hint" aria-live="polite"></span>
+        </div>
         <p class="hint">名單內排名：乒總官方名次 → 考獲章別 → 報考章別 → 康文署 → 冇紀錄。唔會改卡片上嘅全港排名。</p>
         <div class="toolbar-row toolbar-filters">
           <span class="toolbar-label">篩選</span>
@@ -89,6 +111,7 @@
       </div>
     </section>
     <section id="results" class="results"></section>
+    <table id="export-print" class="export-print"></table>
   </main>
 
   <footer>
@@ -113,7 +136,7 @@
     <input type="hidden" name="error" value="" />
   </form>
 
-  <script src="assets/app.js?v=20260904k"></script>
+  <script src="assets/app.js?v=20260905a"></script>
 </body>
 
 </html>
