@@ -23,10 +23,13 @@ const AGE_BANDS = [
   { id: "60+", label: "60歲+" },
   { id: "51-60", label: "51-60歲" },
   { id: "41-50", label: "41-50歲" },
+  { id: "d35", label: "35歲或以上（雙打）" },
   { id: "31-40", label: "31-40歲" },
   { id: "26-30", label: "26-30歲" },
   { id: "21-25", label: "21-25歲" },
+  { id: "d19-34", label: "19-34歲（雙打）" },
   { id: "16-20", label: "16-20歲" },
+  { id: "d18", label: "18歲或以下（雙打）" },
   { id: "10-15", label: "10-15歲" },
   { id: "u9", label: "九歲或以下" },
 ];
@@ -75,6 +78,15 @@ const LCSD_AGE = {
   FY2: "10-15",
   MY1: "16-20",
   FY1: "16-20",
+};
+
+const LCSD_DOUBLES = {
+  MK: "d35",
+  FK: "d35",
+  ML: "d19-34",
+  FL: "d19-34",
+  MM: "d18",
+  FM: "d18",
 };
 
 const MALE_CHARS = new Set(
@@ -284,28 +296,41 @@ function latestLcsdYear(item) {
   return item.lcsd.reduce((max, rec) => Math.max(max, recYear(rec)), 0);
 }
 
+function mapLcsdGroup(code) {
+  if (LCSD_AGE[code]) return { band: LCSD_AGE[code], doubles: false };
+  if (LCSD_DOUBLES[code]) return { band: LCSD_DOUBLES[code], doubles: true };
+  return null;
+}
+
 function lcsdAgeFromItem(item) {
   const records = [...item.lcsd].sort((a, b) => recYear(b) - recYear(a));
   const latestYear = recYear(records[0] || {});
-  const pick = (list) => {
+  const pick = (list, doublesOnly) => {
     let band = "";
     let code = "";
     let year = 0;
+    let doubles = false;
     for (const rec of list) {
       const group = String(rec.group || "").toUpperCase();
-      const mapped = LCSD_AGE[group];
-      if (!mapped) continue;
-      if (!band || ageRank(mapped) < ageRank(band)) {
-        band = mapped;
+      const mapped = mapLcsdGroup(group);
+      if (!mapped || mapped.doubles !== doublesOnly) continue;
+      if (!band || ageRank(mapped.band) < ageRank(band)) {
+        band = mapped.band;
         code = group;
         year = recYear(rec);
+        doubles = mapped.doubles;
       }
     }
-    return { band, code, year };
+    return { band, code, year, doubles };
   };
-  const fromLatest = pick(records.filter((rec) => recYear(rec) === latestYear));
-  if (fromLatest.band) return fromLatest;
-  return pick(records);
+  const latest = records.filter((rec) => recYear(rec) === latestYear);
+  const older = records.filter((rec) => recYear(rec) !== latestYear);
+  return [pick(latest, false), pick(latest, true), pick(older, false), pick(older, true)].find((row) => row.band) || {
+    band: "",
+    code: "",
+    year: 0,
+    doubles: false,
+  };
 }
 
 function ageBand(item) {
@@ -447,6 +472,11 @@ function renderCard(item, totals, orderLabel) {
 function bestPoints(matches) {
   const values = matches.map((p) => p.points).filter((n) => typeof n === "number");
   return values.length ? Math.max(...values) : -1;
+}
+
+function bestRank(item) {
+  const ranks = item.matches.map((p) => overall(p)?.rank).filter((n) => typeof n === "number");
+  return ranks.length ? Math.min(...ranks) : 9e9;
 }
 
 function hasRecord(item) {
