@@ -602,7 +602,7 @@ function renderCard(item, totals, orderLabel) {
       return `<article class="card">
         <div class="card-top">
           <div>
-            <h2>${escapeHtml(player.name)}</h2>
+            <h2><button type="button" class="name-link" data-hktta="${escapeHtml(player.name)}">${escapeHtml(player.name)}</button></h2>
             ${genderBadge(item)}
             ${ageBadge(item)}
             <span class="badge ok">${escapeHtml(bucketText)}</span>
