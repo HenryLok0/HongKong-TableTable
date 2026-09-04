@@ -22,7 +22,7 @@ Open `http://localhost:8080`.
 
 1. Push this repo to GitHub.
 2. Settings → Pages → Deploy from a branch → `main` / `/ (root)`.
-3. Site URL: `https://<user>.github.io/HongKong-TableTable/`
+3. Site URL: `https://henrylok0.github.io/HongKong-TableTable/`
 
 ## Auto update
 
