@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = ROOT / "data" / "lcsd.json"
 EXTRA_PATH = ROOT / "data" / "lcsd_extra_urls.json"
+AGE_MAP_PATH = ROOT / "data" / "lcsd_age_maps.json"
 SEARCH_URL = "https://www.lcsd.gov.hk/clpss/tc/search/common/searchResult.do"
 PORTAL_URL = "https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do"
 HKT = timezone(timedelta(hours=8))
@@ -97,6 +98,8 @@ def is_person_name(name: str) -> bool:
 
 def kind_from_url(url: str) -> str:
     lower = url.lower()
+    if "_pro_" in lower or "prospectus" in lower:
+        return "prospectus"
     if "_res_" in lower or "result" in lower or "winner" in lower:
         return "result"
     if "_sch_" in lower or "schedule" in lower or "fixture" in lower:
@@ -123,7 +126,7 @@ def parse_listing_html(html: str) -> list[dict]:
         for href in re.findall(r"href\s*=\s*'([^']+\.pdf)'", row, flags=re.I):
             url = href.strip()
             kind = kind_from_url(url)
-            if kind not in {"schedule", "result"}:
+            if kind not in {"schedule", "result", "prospectus"}:
                 continue
             key = (url, kind)
             if key in seen:
@@ -161,26 +164,57 @@ def fetch_listing() -> list[dict]:
     return parse_listing_html(html)
 
 
+CODE_TOKEN = r"(?P<code>[MF](?:AA|[YS][1-5]|D[SAY]|[A-Z]{1,2}))"
+
+
 def extract_group_ages(text: str) -> dict[str, dict]:
     """Map group codes to age ranges found in this PDF (district prospectuses differ)."""
     out: dict[str, dict] = {}
 
-    def add(code: str, min_age: int, max_age: int | None, snippet: str) -> None:
-        key = code.upper()
-        if key in out:
+    def add(code: str, min_age: int, max_age: int | None, doubles: bool) -> None:
+        key = (code or "").upper()
+        if not key or key in out:
             return
-        out[key] = {
-            "ageMin": min_age,
-            "ageMax": max_age,
-            "doubles": bool(DOUBLES_NEAR_RE.search(snippet)),
-        }
+        out[key] = {"ageMin": min_age, "ageMax": max_age, "doubles": doubles}
 
-    for match in AGE_SPAN_RE.finditer(text):
-        add(match.group("code"), int(match.group("min")), int(match.group("max")), match.group(0))
-    for match in AGE_PLUS_RE.finditer(text):
-        add(match.group("code"), int(match.group("min")), None, match.group(0))
-    for match in AGE_UNDER_RE.finditer(text):
-        add(match.group("code"), 0, int(match.group("max")), match.group(0))
+    def scan(chunk: str) -> None:
+        compact = re.sub(r"\s+", "", chunk)
+        if not compact:
+            return
+        doubles = "雙打" in compact
+        span = re.search(rf"(?P<min>\d+)[-–至到](?P<max>\d+)歲.{{0,32}}?{CODE_TOKEN}", compact)
+        if span:
+            add(span.group("code"), int(span.group("min")), int(span.group("max")), doubles)
+            return
+        span_rev = re.search(rf"{CODE_TOKEN}.{{0,16}}?(?P<min>\d+)[-–至到](?P<max>\d+)歲", compact)
+        if span_rev:
+            add(span_rev.group("code"), int(span_rev.group("min")), int(span_rev.group("max")), doubles)
+            return
+        plus = re.search(rf"(?P<min>\d+)歲或以上.{{0,32}}?{CODE_TOKEN}", compact)
+        if plus:
+            add(plus.group("code"), int(plus.group("min")), None, doubles)
+            return
+        plus_rev = re.search(rf"{CODE_TOKEN}.{{0,16}}?(?P<min>\d+)歲或以上", compact)
+        if plus_rev:
+            add(plus_rev.group("code"), int(plus_rev.group("min")), None, doubles)
+            return
+        under = re.search(rf"(?P<max>\d+)歲或以下.{{0,32}}?{CODE_TOKEN}", compact)
+        if under:
+            add(under.group("code"), 0, int(under.group("max")), doubles)
+            return
+        under_rev = re.search(rf"{CODE_TOKEN}.{{0,16}}?(?P<max>\d+)歲或以下", compact)
+        if under_rev:
+            add(under_rev.group("code"), 0, int(under_rev.group("max")), doubles)
+
+    for line in text.splitlines():
+        scan(line)
+    if len(out) < 4:
+        for match in AGE_SPAN_RE.finditer(text):
+            add(match.group("code"), int(match.group("min")), int(match.group("max")), bool(DOUBLES_NEAR_RE.search(match.group(0))))
+        for match in AGE_PLUS_RE.finditer(text):
+            add(match.group("code"), int(match.group("min")), None, bool(DOUBLES_NEAR_RE.search(match.group(0))))
+        for match in AGE_UNDER_RE.finditer(text):
+            add(match.group("code"), 0, int(match.group("max")), bool(DOUBLES_NEAR_RE.search(match.group(0))))
     return out
 
 
@@ -230,7 +264,7 @@ def enrich_from_text(meta: dict, text: str) -> dict:
     return out
 
 
-def parse_pdf(path: Path, meta: dict) -> list[dict]:
+def parse_pdf(path: Path, meta: dict) -> tuple[list[dict], dict[str, dict], dict]:
     import pdfplumber
 
     chunks = []
@@ -255,7 +289,48 @@ def parse_pdf(path: Path, meta: dict) -> list[dict]:
                 **group_age_fields(group, ages),
             }
         )
-    return records
+    return records, ages, meta
+
+
+def load_age_maps() -> dict:
+    if not AGE_MAP_PATH.exists():
+        return {"source": "", "maps": {}}
+    try:
+        data = json.loads(AGE_MAP_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"source": "", "maps": {}}
+    data.setdefault("maps", {})
+    return data
+
+
+def put_age_map(maps: dict, key: str, groups: dict, source: str, overwrite: bool) -> None:
+    if not key or not groups:
+        return
+    existing = maps.get(key)
+    if existing and not overwrite:
+        merged = dict(existing.get("groups") or {})
+        for code, info in groups.items():
+            merged.setdefault(code, info)
+        existing["groups"] = merged
+        return
+    maps[key] = {"source": source, "groups": groups}
+
+
+def apply_age_maps(players: dict, maps: dict) -> int:
+    filled = 0
+    for recs in players.values():
+        for rec in recs:
+            if rec.get("ageMin") is not None:
+                continue
+            groups = (maps.get(rec.get("url") or "") or {}).get("groups") or (
+                maps.get(f"{rec.get('district', '')}|{rec.get('year', '')}") or {}
+            ).get("groups")
+            fields = group_age_fields(rec.get("group") or "", groups or {})
+            if not fields:
+                continue
+            rec.update(fields)
+            filled += 1
+    return filled
 
 
 def load_extra() -> list[dict]:
@@ -279,6 +354,8 @@ def main() -> None:
 
     players: dict[str, list[dict]] = defaultdict(list)
     parsed_docs = []
+    age_bundle = load_age_maps()
+    age_maps: dict = age_bundle.get("maps") or {}
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         for i, meta in enumerate(docs, 1):
@@ -291,20 +368,28 @@ def main() -> None:
             path = tmp_dir / f"{i}.pdf"
             path.write_bytes(body)
             try:
-                records = parse_pdf(path, meta)
+                records, ages, parsed_meta = parse_pdf(path, meta)
             except Exception as exc:  # noqa: BLE001
                 print(f"  parse error: {exc}")
                 continue
+            kind = parsed_meta.get("kind") or kind_from_url(url)
+            district = parsed_meta.get("district") or ""
+            year = parsed_meta.get("year") or ""
             parsed_docs.append(
                 {
                     "url": url,
-                    "district": meta.get("district") or "",
-                    "year": meta.get("year") or "",
-                    "kind": meta.get("kind") or kind_from_url(url),
+                    "district": district,
+                    "year": year,
+                    "kind": kind,
                     "names": len(records),
+                    "ageCodes": len(ages),
                 }
             )
-            print(f"  names {len(records)}")
+            print(f"  names {len(records)} age-codes {len(ages)}")
+            if ages:
+                overwrite = kind == "prospectus"
+                put_age_map(age_maps, url, ages, kind, overwrite)
+                put_age_map(age_maps, f"{district}|{year}", ages, kind, overwrite)
             for rec in records:
                 row = {
                     "name": rec["name"],
@@ -339,6 +424,12 @@ def main() -> None:
                     existing.add(key)
                     kept += 1
         print(f"kept {kept} historical LCSD name rows")
+
+    filled = apply_age_maps(players, age_maps)
+    print(f"filled ages from maps: {filled}")
+    age_bundle["maps"] = age_maps
+    age_bundle["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
+    AGE_MAP_PATH.write_text(json.dumps(age_bundle, ensure_ascii=False, indent=2), encoding="utf-8")
 
     payload = {
         "source": "康樂及文化事務署地區分齡乒乓球比賽（賽程表／成績 PDF）",

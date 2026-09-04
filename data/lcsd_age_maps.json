@@ -1,0 +1,32 @@
+{
+  "source": "Per district-year LCSD group-to-age maps. Prefer prospectus text; heuristics only as fallback.",
+  "maps": {
+    "東區|2023": {
+      "source": "MA-MK eleven singles (no ML/MM doubles codes in schedule)",
+      "groups": {
+        "MA": { "ageMin": 65, "ageMax": null, "doubles": false },
+        "FA": { "ageMin": 65, "ageMax": null, "doubles": false },
+        "MB": { "ageMin": 55, "ageMax": 64, "doubles": false },
+        "FB": { "ageMin": 55, "ageMax": 64, "doubles": false },
+        "MC": { "ageMin": 45, "ageMax": 54, "doubles": false },
+        "FC": { "ageMin": 45, "ageMax": 54, "doubles": false },
+        "MD": { "ageMin": 35, "ageMax": 44, "doubles": false },
+        "FD": { "ageMin": 35, "ageMax": 44, "doubles": false },
+        "ME": { "ageMin": 25, "ageMax": 34, "doubles": false },
+        "FE": { "ageMin": 25, "ageMax": 34, "doubles": false },
+        "MF": { "ageMin": 19, "ageMax": 24, "doubles": false },
+        "FF": { "ageMin": 19, "ageMax": 24, "doubles": false },
+        "MG": { "ageMin": 16, "ageMax": 18, "doubles": false },
+        "FG": { "ageMin": 16, "ageMax": 18, "doubles": false },
+        "MH": { "ageMin": 14, "ageMax": 15, "doubles": false },
+        "FH": { "ageMin": 14, "ageMax": 15, "doubles": false },
+        "MI": { "ageMin": 12, "ageMax": 13, "doubles": false },
+        "FI": { "ageMin": 12, "ageMax": 13, "doubles": false },
+        "MJ": { "ageMin": 10, "ageMax": 11, "doubles": false },
+        "FJ": { "ageMin": 10, "ageMax": 11, "doubles": false },
+        "MK": { "ageMin": 0, "ageMax": 9, "doubles": false },
+        "FK": { "ageMin": 0, "ageMax": 9, "doubles": false }
+      }
+    }
+  }
+}

@@ -32,7 +32,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/rankings.json data/lcsd.json
+          git add data/rankings.json data/lcsd.json data/lcsd_age_maps.json
           if git diff --staged --quiet; then
             echo "No data changes"
             exit 0

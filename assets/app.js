@@ -169,6 +169,7 @@ const FILTERS = [
 let snapshot = null;
 let lcsdIndex = { players: {} };
 let lcsdDocCodes = new Map();
+let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
 
 function loadSettings() {
@@ -401,6 +402,28 @@ function storedAgeInfo(rec) {
   };
 }
 
+function ageMapGroups(rec) {
+  const maps = lcsdAgeMaps.maps || {};
+  const byUrl = rec.url && maps[rec.url]?.groups;
+  if (byUrl) return byUrl;
+  return maps[`${rec.district || ""}|${rec.year || ""}`]?.groups || null;
+}
+
+function mappedFromAgeMap(rec) {
+  const groups = ageMapGroups(rec);
+  if (!groups) return null;
+  const code = String(rec.group || "").toUpperCase();
+  const info = groups[code] || groups[code.replace(/\d+$/, "")];
+  if (!info || !Number.isFinite(Number(info.ageMin))) return null;
+  const maxRaw = info.ageMax;
+  return {
+    code,
+    min: Number(info.ageMin),
+    max: maxRaw == null || maxRaw === "" ? OPEN : Number(maxRaw),
+    doubles: Boolean(info.doubles),
+  };
+}
+
 function resolveLcsdGroup(raw, scheme) {
   const code = String(raw || "").toUpperCase();
   if (!code) return null;
@@ -412,8 +435,7 @@ function resolveLcsdGroup(raw, scheme) {
 }
 
 function mapLcsdRecord(rec) {
-  const stored = storedAgeInfo(rec);
-  const mapped = stored || resolveLcsdGroup(rec.group, schemeForRecord(rec));
+  const mapped = storedAgeInfo(rec) || mappedFromAgeMap(rec) || resolveLcsdGroup(rec.group, schemeForRecord(rec));
   if (!mapped) return null;
   const year = recYear(rec);
   const delta = year ? Math.max(0, currentYear() - year) : 0;
@@ -807,14 +829,16 @@ async function boot() {
   bootSettings();
   const meta = document.getElementById("data-meta");
   try {
-    const [rankRes, lcsdRes] = await Promise.all([
+    const [rankRes, lcsdRes, ageMapRes] = await Promise.all([
       fetch("data/rankings.json"),
       fetch("data/lcsd.json"),
+      fetch("data/lcsd_age_maps.json"),
     ]);
     if (!rankRes.ok) throw new Error(rankRes.statusText);
     snapshot = await rankRes.json();
     buildScoredRanks();
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
+    if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     indexLcsdDocCodes();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
     meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名`;
