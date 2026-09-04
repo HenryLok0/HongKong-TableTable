@@ -1045,6 +1045,22 @@ function updateStats(results) {
     .map((b) => `<li><span class="badge ${bucketTone(b.id)}">${escapeHtml(b.label)}</span>（${bucketCounts[b.id]}）</li>`)
     .join("");
 
+  const badgeCounts = Object.fromEntries(BADGE_FILTERS.map((b) => [b.id, 0]));
+  for (const item of results) {
+    const id = itemBadgeId(item);
+    if (id) badgeCounts[id] += 1;
+  }
+  const badgeRows = BADGE_FILTERS.filter((b) => badgeCounts[b.id] > 0);
+  const badgeBox = document.getElementById("badge-stats");
+  if (!badgeRows.length) {
+    badgeBox.classList.add("hidden");
+  } else {
+    badgeBox.classList.remove("hidden");
+    document.getElementById("badge-list").innerHTML = badgeRows
+      .map((b) => `<li><span class="badge ${badgeTone(b.id)}">${escapeHtml(b.label)}</span>（${badgeCounts[b.id]}）</li>`)
+      .join("");
+  }
+
   const ageCounts = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
   for (const item of results) {
     const id = ageBand(item);
