@@ -254,9 +254,15 @@ button.ghost {
 }
 
 .breakdown-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: 16px 32px;
+}
+
+.breakdown-grid > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .toolbar {
@@ -588,8 +594,7 @@ footer {
 
 @media (max-width: 800px) {
   .summary,
-  .grid,
-  .breakdown-grid {
+  .grid {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -597,7 +602,6 @@ footer {
 @media (max-width: 560px) {
   .summary,
   .grid,
-  .breakdown-grid,
   .card-top {
     grid-template-columns: 1fr;
     flex-direction: column;
