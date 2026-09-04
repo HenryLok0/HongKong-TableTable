@@ -119,6 +119,30 @@ const LCSD_SCHEMES = {
     MDY: ageRange(0, 18, true),
     FDY: ageRange(0, 18, true),
   },
+  eleven: {
+    MA: ageRange(65, OPEN),
+    FA: ageRange(65, OPEN),
+    MB: ageRange(55, 64),
+    FB: ageRange(55, 64),
+    MC: ageRange(45, 54),
+    FC: ageRange(45, 54),
+    MD: ageRange(35, 44),
+    FD: ageRange(35, 44),
+    ME: ageRange(25, 34),
+    FE: ageRange(25, 34),
+    MF: ageRange(19, 24),
+    FF: ageRange(19, 24),
+    MG: ageRange(16, 18),
+    FG: ageRange(16, 18),
+    MH: ageRange(14, 15),
+    FH: ageRange(14, 15),
+    MI: ageRange(12, 13),
+    FI: ageRange(12, 13),
+    MJ: ageRange(10, 11),
+    FJ: ageRange(10, 11),
+    MK: ageRange(0, 9),
+    FK: ageRange(0, 9),
+  },
 };
 
 const MALE_CHARS = new Set(
@@ -346,6 +370,9 @@ function indexLcsdDocCodes() {
 function schemeFromCodes(codes) {
   const list = [...(codes || [])];
   if (list.some((c) => /^[MF](Y[1-5]|S[1-3]|DS|DA|DY)$/.test(c))) return "wts";
+  const hasDoublesLadder = codes?.has("ML") || codes?.has("FL") || codes?.has("MM") || codes?.has("FM");
+  const hasK = codes?.has("MK") || codes?.has("FK");
+  if (hasK && !hasDoublesLadder) return "eleven";
   if (codes?.has("MAA") || codes?.has("FAA")) return "maa";
   return "classic";
 }
