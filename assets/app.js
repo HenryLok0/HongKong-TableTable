@@ -430,9 +430,13 @@ function levelText(player) {
   const all = overall(player);
   const points = player.points ?? all?.points;
   if (points == null) return "有年齡榜紀錄，但積分未讀到。";
+  if (points >= 800) return "全港頂尖註冊球員，公開賽常規種子前列。";
   if (points >= 400) return "高水平註冊球員，接近地區頂尖／公開賽常規種子區。";
+  if (points >= 220) return "公開賽有穩定競爭力，屬地區前列。";
   if (points >= 120) return "有穩定乒總計分賽紀錄，屬註冊球員中上游。";
+  if (points >= 70) return "持續參加計分賽，屬註冊球員中游。";
   if (points >= 40) return "已有公開計分賽積分，屬有系統參賽嘅註冊球員。";
+  if (points >= 20) return "積分開始累積，仍屬初段上榜。";
   if (points >= 10) return "已上榜，但積分仍低，多數只打過少量計分賽。";
   return "積分極低或幾乎只得上榜分，程度要以實際對賽同地區賽補充判斷。";
 }
