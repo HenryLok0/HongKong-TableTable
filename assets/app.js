@@ -497,14 +497,29 @@ function buildFilters(results) {
     .join("");
 }
 
+function dateOnly(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.slice(0, 10);
+}
+
+function periodLabel() {
+  const period = snapshot.period || "";
+  const match = /^(\d{4})-(\d{1,2})$/.exec(period);
+  const main = match ? `${match[1]}年第${Number(match[2])}期` : period;
+  const updated = dateOnly(snapshot.updated);
+  return updated ? `${main}（${updated}）` : main;
+}
+
 function updateStats(results) {
   const found = results.filter((r) => r.matches.length);
   const men = results.filter((r) => inferGender(r).gender === "M").length;
   const women = results.filter((r) => inferGender(r).gender === "F").length;
   const unknown = results.length - men - women;
+  const genderMain = `男 ${men}／女 ${women}`;
   const genderText = unknown
-    ? `男 ${men}／女 ${women}（未知 ${unknown}）`
-    : `男 ${men}／女 ${women}`;
+    ? `${genderMain}<span class="stat-sub">（未知 ${unknown}）</span>`
+    : genderMain;
 
   const bucketCounts = Object.fromEntries(BUCKETS.map((b) => [b.id, 0]));
   for (const item of results) bucketCounts[classify(item)] += 1;
@@ -526,7 +541,7 @@ function updateStats(results) {
     <div class="stat"><span>查詢人數</span><b>${results.length}</b></div>
     <div class="stat"><span>乒總上榜</span><b>${found.length}</b></div>
     <div class="stat"><span>男女比例</span><b>${genderText}</b></div>
-    <div class="stat"><span>資料期數</span><b>${snapshot.period}</b></div>
+    <div class="stat"><span>資料期數</span><b>${escapeHtml(periodLabel())}</b></div>
   `;
 }
 
@@ -625,8 +640,7 @@ async function boot() {
     buildScoredRanks();
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
-    const updated = snapshot.updated || lcsdIndex.updated || "—";
-    meta.textContent = `目前資料：乒總 ${snapshot.period} 期（列印 ${snapshot.printed || "—"}，${snapshot.players.length} 人）· 康文署 PDF ${lcsdCount} 個姓名 · 上次更新 ${updated}`;
+    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名`;
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
     console.error(err);

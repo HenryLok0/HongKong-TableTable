@@ -181,6 +181,14 @@ button.ghost {
   line-height: 1.2;
 }
 
+.stat-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .breakdown {
   margin-top: 16px;
   background: var(--card);
