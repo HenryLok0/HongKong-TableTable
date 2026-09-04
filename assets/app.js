@@ -243,6 +243,22 @@ function parseNames(raw) {
   return names;
 }
 
+function pageBase() {
+  const url = new URL(location.href);
+  url.hash = "";
+  url.search = "";
+  if (!url.pathname.endsWith("/") && !/\.html?$/i.test(url.pathname)) {
+    url.pathname += "/";
+  }
+  return url;
+}
+
+function dataUrl(file) {
+  const script = document.querySelector("script[src*='app.js']")?.src;
+  const fromScript = script ? new URL("../data/", script) : new URL("data/", pageBase());
+  return new URL(file, fromScript).href;
+}
+
 function shareParams() {
   const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
   const search = new URLSearchParams(location.search);
@@ -288,19 +304,13 @@ function bytesToNames(bytes) {
 }
 
 async function deflateRaw(bytes) {
-  const stream = new CompressionStream("deflate-raw");
-  const writer = stream.writable.getWriter();
-  await writer.write(bytes);
-  await writer.close();
-  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 async function inflateRaw(bytes) {
-  const stream = new DecompressionStream("deflate-raw");
-  const writer = stream.writable.getWriter();
-  await writer.write(bytes);
-  await writer.close();
-  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 async function encodeSharePayload(names) {
@@ -336,11 +346,8 @@ async function readSharedNames() {
 }
 
 async function shareUrlFor(names) {
-  const url = new URL(location.href);
-  url.hash = "";
-  url.searchParams.delete("n");
+  const url = pageBase();
   if (names.length) url.searchParams.set("s", await encodeSharePayload(names));
-  else url.searchParams.delete("s");
   return url;
 }
 
@@ -1103,12 +1110,12 @@ function openHkttaSearch(name) {
 
 async function runSearch() {
   const names = parseNames(document.getElementById("names").value);
-  await syncShareUrl(names);
   if (!names.length) {
     lastResults = [];
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");
     document.getElementById("results").innerHTML = "";
+    syncShareUrl([]).catch(() => {});
     return;
   }
   lastResults = names.map((query) => ({
@@ -1118,6 +1125,7 @@ async function runSearch() {
     badges: findBadges(query),
   }));
   renderResults();
+  syncShareUrl(names).catch(() => {});
 }
 
 function applyTheme(dark) {
@@ -1157,10 +1165,10 @@ async function boot() {
   const meta = document.getElementById("data-meta");
   try {
     const [rankRes, lcsdRes, ageMapRes, badgeRes] = await Promise.all([
-      fetch("data/rankings.json"),
-      fetch("data/lcsd.json"),
-      fetch("data/lcsd_age_maps.json"),
-      fetch("data/badges.json"),
+      fetch(dataUrl("rankings.json")),
+      fetch(dataUrl("lcsd.json")),
+      fetch(dataUrl("lcsd_age_maps.json")),
+      fetch(dataUrl("badges.json")),
     ]);
     if (!rankRes.ok) throw new Error(rankRes.statusText);
     snapshot = await rankRes.json();
@@ -1184,7 +1192,7 @@ async function boot() {
   }
 
   document.getElementById("search-btn").addEventListener("click", runSearch);
-  document.getElementById("share-btn").addEventListener("click", copyShareLink);
+  document.getElementById("share-btn")?.addEventListener("click", copyShareLink);
   document.getElementById("clear-btn").addEventListener("click", () => {
     document.getElementById("names").value = "";
     lastResults = [];
