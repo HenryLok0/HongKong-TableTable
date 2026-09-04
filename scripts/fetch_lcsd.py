@@ -28,6 +28,19 @@ NAME_RE = re.compile(r"[\u4e00-\u9fff]{2,4}")
 NUMBERED_NAME_RE = re.compile(r"(?:^|[^\u4e00-\u9fff])(\d{1,3})\s*([\u4e00-\u9fff]{2,4})(?:\s+|$)")
 GROUP_RE = re.compile(r"\b([MF][A-Z]{1,2}\d?)\b")
 YEAR_RE = re.compile(r"(20\d{2})")
+AGE_SPAN_RE = re.compile(
+    r"(?P<min>\d+)\s*[-–至到]\s*(?P<max>\d+)\s*歲.{0,80}?(?P<code>[MF](?:AA|[YS][1-5]|D[SAY]|[A-Z]{1,2}))",
+    re.DOTALL,
+)
+AGE_PLUS_RE = re.compile(
+    r"(?P<min>\d+)\s*歲或以上.{0,80}?(?P<code>[MF](?:AA|[YS][1-5]|D[SAY]|[A-Z]{1,2}))",
+    re.DOTALL,
+)
+AGE_UNDER_RE = re.compile(
+    r"(?P<max>\d+)\s*歲或以下.{0,80}?(?P<code>[MF](?:AA|[YS][1-5]|D[SAY]|[A-Z]{1,2}))",
+    re.DOTALL,
+)
+DOUBLES_NEAR_RE = re.compile(r"雙打")
 DISTRICT_RE = re.compile(
     r"(東區|灣仔|中西區|南區|油尖旺|深水埗|九龍城|黃大仙|觀塘|沙田|西貢|屯門|葵青|元朗|北區|大埔|荃灣|離島)"
 )
@@ -148,6 +161,40 @@ def fetch_listing() -> list[dict]:
     return parse_listing_html(html)
 
 
+def extract_group_ages(text: str) -> dict[str, dict]:
+    """Map group codes to age ranges found in this PDF (district prospectuses differ)."""
+    out: dict[str, dict] = {}
+
+    def add(code: str, min_age: int, max_age: int | None, snippet: str) -> None:
+        key = code.upper()
+        if key in out:
+            return
+        out[key] = {
+            "ageMin": min_age,
+            "ageMax": max_age,
+            "doubles": bool(DOUBLES_NEAR_RE.search(snippet)),
+        }
+
+    for match in AGE_SPAN_RE.finditer(text):
+        add(match.group("code"), int(match.group("min")), int(match.group("max")), match.group(0))
+    for match in AGE_PLUS_RE.finditer(text):
+        add(match.group("code"), int(match.group("min")), None, match.group(0))
+    for match in AGE_UNDER_RE.finditer(text):
+        add(match.group("code"), 0, int(match.group("max")), match.group(0))
+    return out
+
+
+def group_age_fields(group: str, ages: dict[str, dict]) -> dict:
+    code = (group or "").upper()
+    info = ages.get(code)
+    if not info:
+        base = re.sub(r"\d+$", "", code)
+        info = ages.get(base)
+    if not info:
+        return {}
+    return {"ageMin": info["ageMin"], "ageMax": info["ageMax"], "doubles": info["doubles"]}
+
+
 def extract_group_near(text: str, name: str) -> str:
     idx = text.find(name)
     if idx < 0:
@@ -192,6 +239,7 @@ def parse_pdf(path: Path, meta: dict) -> list[dict]:
             chunks.append(page.extract_text() or "")
     text = "\n".join(chunks)
     meta = enrich_from_text(meta, text)
+    ages = extract_group_ages(text)
     records = []
     for name, group in extract_names(text):
         records.append(
@@ -204,6 +252,7 @@ def parse_pdf(path: Path, meta: dict) -> list[dict]:
                 "kind": meta.get("kind") or kind_from_url(meta["url"]),
                 "event": meta.get("event") or "",
                 "url": meta["url"],
+                **group_age_fields(group, ages),
             }
         )
     return records
@@ -257,17 +306,20 @@ def main() -> None:
             )
             print(f"  names {len(records)}")
             for rec in records:
-                players[rec["norm"]].append(
-                    {
-                        "name": rec["name"],
-                        "district": rec["district"],
-                        "year": rec["year"],
-                        "kind": rec["kind"],
-                        "group": rec["group"],
-                        "event": rec["event"],
-                        "url": rec["url"],
-                    }
-                )
+                row = {
+                    "name": rec["name"],
+                    "district": rec["district"],
+                    "year": rec["year"],
+                    "kind": rec["kind"],
+                    "group": rec["group"],
+                    "event": rec["event"],
+                    "url": rec["url"],
+                }
+                if "ageMin" in rec:
+                    row["ageMin"] = rec["ageMin"]
+                    row["ageMax"] = rec["ageMax"]
+                    row["doubles"] = rec["doubles"]
+                players[rec["norm"]].append(row)
 
     if OUT_PATH.exists():
         old = json.loads(OUT_PATH.read_text(encoding="utf-8"))

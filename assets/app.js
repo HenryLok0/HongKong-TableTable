@@ -19,74 +19,106 @@ const BUCKETS = [
   { id: "none", label: "完全沒有任何紀錄" },
 ];
 
+const OPEN = Infinity;
+
 const AGE_BANDS = [
-  { id: "60+", label: "60歲+" },
-  { id: "51-60", label: "51-60歲" },
-  { id: "41-50", label: "41-50歲" },
-  { id: "d35", label: "35歲或以上（雙打）" },
-  { id: "31-40", label: "31-40歲" },
-  { id: "26-30", label: "26-30歲" },
-  { id: "21-25", label: "21-25歲" },
-  { id: "d19-34", label: "19-34歲（雙打）" },
-  { id: "16-20", label: "16-20歲" },
-  { id: "d18", label: "18歲或以下（雙打）" },
-  { id: "10-15", label: "10-15歲" },
-  { id: "u9", label: "九歲或以下" },
+  { id: "65+", min: 65, max: OPEN, label: "65歲或以上" },
+  { id: "55-64", min: 55, max: 64, label: "55-64歲" },
+  { id: "45-54", min: 45, max: 54, label: "45-54歲" },
+  { id: "35-44", min: 35, max: 44, label: "35-44歲" },
+  { id: "25-34", min: 25, max: 34, label: "25-34歲" },
+  { id: "19-24", min: 19, max: 24, label: "19-24歲" },
+  { id: "16-18", min: 16, max: 18, label: "16-18歲" },
+  { id: "14-15", min: 14, max: 15, label: "14-15歲" },
+  { id: "12-13", min: 12, max: 13, label: "12-13歲" },
+  { id: "10-11", min: 10, max: 11, label: "10-11歲" },
+  { id: "u9", min: 0, max: 9, label: "9歲或以下" },
 ];
 
 const HKTTA_AGE = {
   U9: "u9",
-  U11: "10-15",
-  U13: "10-15",
-  U15: "10-15",
-  U17: "16-20",
-  U19: "16-20",
-  U21: "21-25",
+  U11: "10-11",
+  U13: "12-13",
+  U15: "14-15",
+  U17: "16-18",
+  U19: "16-18",
+  U21: "19-24",
 };
 
-// LCSD ranges that span two display bands use the older band.
-const LCSD_AGE = {
-  MA: "60+",
-  FA: "60+",
-  MAA: "60+",
-  FAA: "60+",
-  MB: "51-60",
-  FB: "51-60",
-  MC: "41-50",
-  FC: "41-50",
-  MD: "31-40",
-  FD: "31-40",
-  ME: "21-25",
-  FE: "21-25",
-  MF: "16-20",
-  FF: "16-20",
-  MG: "10-15",
-  FG: "10-15",
-  MH: "10-15",
-  FH: "10-15",
-  MI: "10-15",
-  FI: "10-15",
-  MJ: "u9",
-  FJ: "u9",
-  MY5: "u9",
-  FY5: "u9",
-  MY4: "10-15",
-  FY4: "10-15",
-  MY3: "10-15",
-  FY3: "10-15",
-  MY2: "10-15",
-  FY2: "10-15",
-  MY1: "16-20",
-  FY1: "16-20",
+function ageRange(min, max, doubles = false) {
+  return { min, max, doubles };
+}
+
+const LCSD_CORE = {
+  MB: ageRange(45, 54),
+  FB: ageRange(45, 54),
+  MC: ageRange(35, 44),
+  FC: ageRange(35, 44),
+  MD: ageRange(25, 34),
+  FD: ageRange(25, 34),
+  ME: ageRange(19, 24),
+  FE: ageRange(19, 24),
+  MF: ageRange(16, 18),
+  FF: ageRange(16, 18),
+  MG: ageRange(14, 15),
+  FG: ageRange(14, 15),
+  MH: ageRange(12, 13),
+  FH: ageRange(12, 13),
+  MI: ageRange(10, 11),
+  FI: ageRange(10, 11),
+  MJ: ageRange(0, 9),
+  FJ: ageRange(0, 9),
+  MK: ageRange(35, OPEN, true),
+  FK: ageRange(35, OPEN, true),
+  ML: ageRange(19, 34, true),
+  FL: ageRange(19, 34, true),
+  MM: ageRange(0, 18, true),
+  FM: ageRange(0, 18, true),
 };
 
-const LCSD_DOUBLES = {
-  MK: "d35",
-  FK: "d35",
-  ML: "d19-34",
-  FL: "d19-34",
-  MM: "d18",
-  FM: "d18",
+const LCSD_SCHEMES = {
+  maa: {
+    MAA: ageRange(65, OPEN),
+    FAA: ageRange(65, OPEN),
+    MA: ageRange(55, 64),
+    FA: ageRange(55, 64),
+    ...LCSD_CORE,
+  },
+  classic: {
+    MA: ageRange(55, OPEN),
+    FA: ageRange(55, OPEN),
+    ...LCSD_CORE,
+  },
+  wts: {
+    MAA: ageRange(65, OPEN),
+    FAA: ageRange(65, OPEN),
+    MS1: ageRange(55, OPEN),
+    FS1: ageRange(55, OPEN),
+    MS2: ageRange(45, 54),
+    FS2: ageRange(45, 54),
+    MS3: ageRange(35, 44),
+    FS3: ageRange(35, 44),
+    MA1: ageRange(25, 34),
+    FA1: ageRange(25, 34),
+    MA2: ageRange(19, 24),
+    FA2: ageRange(19, 24),
+    MY1: ageRange(16, 18),
+    FY1: ageRange(16, 18),
+    MY2: ageRange(14, 15),
+    FY2: ageRange(14, 15),
+    MY3: ageRange(12, 13),
+    FY3: ageRange(12, 13),
+    MY4: ageRange(10, 11),
+    FY4: ageRange(10, 11),
+    MY5: ageRange(0, 9),
+    FY5: ageRange(0, 9),
+    MDS: ageRange(35, OPEN, true),
+    FDS: ageRange(35, OPEN, true),
+    MDA: ageRange(19, 34, true),
+    FDA: ageRange(19, 34, true),
+    MDY: ageRange(0, 18, true),
+    FDY: ageRange(0, 18, true),
+  },
 };
 
 const MALE_CHARS = new Set(
@@ -112,6 +144,7 @@ const FILTERS = [
 
 let snapshot = null;
 let lcsdIndex = { players: {} };
+let lcsdDocCodes = new Map();
 let lastResults = [];
 
 function loadSettings() {
@@ -292,43 +325,107 @@ function recYear(rec) {
   return Number.isFinite(year) ? year : 0;
 }
 
-function latestLcsdYear(item) {
-  return item.lcsd.reduce((max, rec) => Math.max(max, recYear(rec)), 0);
+function currentYear() {
+  return new Date().getFullYear();
 }
 
-function mapLcsdGroup(code) {
-  if (LCSD_AGE[code]) return { band: LCSD_AGE[code], doubles: false };
-  if (LCSD_DOUBLES[code]) return { band: LCSD_DOUBLES[code], doubles: true };
+function indexLcsdDocCodes() {
+  lcsdDocCodes = new Map();
+  for (const recs of Object.values(lcsdIndex.players || {})) {
+    for (const rec of recs) {
+      const url = rec.url || `${rec.district}|${rec.year}`;
+      if (!url) continue;
+      const code = String(rec.group || "").toUpperCase();
+      if (!code) continue;
+      if (!lcsdDocCodes.has(url)) lcsdDocCodes.set(url, new Set());
+      lcsdDocCodes.get(url).add(code);
+    }
+  }
+}
+
+function schemeFromCodes(codes) {
+  const list = [...(codes || [])];
+  if (list.some((c) => /^[MF](Y[1-5]|S[1-3]|DS|DA|DY)$/.test(c))) return "wts";
+  if (codes?.has("MAA") || codes?.has("FAA")) return "maa";
+  return "classic";
+}
+
+function schemeForRecord(rec) {
+  const url = rec.url || `${rec.district}|${rec.year}`;
+  return schemeFromCodes(lcsdDocCodes.get(url));
+}
+
+function bandFromEstimatedAge(nowMin, nowMax) {
+  const age = nowMax === OPEN ? nowMin : nowMax;
+  const hit = AGE_BANDS.find((b) => age >= b.min && age <= b.max);
+  return hit?.id || "";
+}
+
+function storedAgeInfo(rec) {
+  const min = Number(rec.ageMin);
+  if (!Number.isFinite(min)) return null;
+  const maxRaw = rec.ageMax;
+  const max = maxRaw == null || maxRaw === "" ? OPEN : Number(maxRaw);
+  return {
+    min,
+    max: Number.isFinite(max) ? max : OPEN,
+    doubles: Boolean(rec.doubles),
+    code: String(rec.group || "").toUpperCase(),
+  };
+}
+
+function resolveLcsdGroup(raw, scheme) {
+  const code = String(raw || "").toUpperCase();
+  if (!code) return null;
+  const table = LCSD_SCHEMES[scheme] || LCSD_SCHEMES.classic;
+  if (table[code]) return { code, ...table[code] };
+  const base = code.replace(/\d+$/, "");
+  if (base !== code && table[base]) return { code: base, ...table[base] };
   return null;
 }
 
-function lcsdAgeFromItem(item) {
-  const records = [...item.lcsd].sort((a, b) => recYear(b) - recYear(a));
-  const latestYear = recYear(records[0] || {});
-  const pick = (list, doublesOnly) => {
-    let band = "";
-    let code = "";
-    let year = 0;
-    let doubles = false;
-    for (const rec of list) {
-      const group = String(rec.group || "").toUpperCase();
-      const mapped = mapLcsdGroup(group);
-      if (!mapped || mapped.doubles !== doublesOnly) continue;
-      if (!band || ageRank(mapped.band) < ageRank(band)) {
-        band = mapped.band;
-        code = group;
-        year = recYear(rec);
-        doubles = mapped.doubles;
-      }
-    }
-    return { band, code, year, doubles };
+function mapLcsdRecord(rec) {
+  const stored = storedAgeInfo(rec);
+  const mapped = stored || resolveLcsdGroup(rec.group, schemeForRecord(rec));
+  if (!mapped) return null;
+  const year = recYear(rec);
+  const delta = year ? Math.max(0, currentYear() - year) : 0;
+  const nowMin = mapped.min + delta;
+  const nowMax = mapped.max === OPEN ? OPEN : mapped.max + delta;
+  const band = bandFromEstimatedAge(nowMin, nowMax);
+  if (!band) return null;
+  return {
+    band,
+    code: mapped.code,
+    year,
+    delta,
+    doubles: Boolean(mapped.doubles),
   };
-  const latest = records.filter((rec) => recYear(rec) === latestYear);
-  const older = records.filter((rec) => recYear(rec) !== latestYear);
-  return [pick(latest, false), pick(latest, true), pick(older, false), pick(older, true)].find((row) => row.band) || {
+}
+
+function pickMappedAge(rows) {
+  let best = null;
+  for (const row of rows) {
+    if (!row?.band) continue;
+    if (!best || recYear({ year: row.year }) > recYear({ year: best.year })) {
+      best = row;
+      continue;
+    }
+    if (row.year === best.year && ageRank(row.band) < ageRank(best.band)) best = row;
+  }
+  return best;
+}
+
+function lcsdAgeFromItem(item) {
+  const records = Array.isArray(item.lcsd) ? item.lcsd : [];
+  const mapped = records.map(mapLcsdRecord).filter(Boolean);
+  const singles = mapped.filter((row) => !row.doubles);
+  const doubles = mapped.filter((row) => row.doubles);
+  return pickMappedAge(singles) || pickMappedAge(doubles) || {
     band: "",
     code: "",
     year: 0,
+    delta: 0,
     doubles: false,
   };
 }
@@ -346,10 +443,10 @@ function ageBadge(item) {
   if (!band) return "";
   const lcsd = lcsdAgeFromItem(item);
   if (!lcsd.code) return `<span class="badge ok">${escapeHtml(band.label)}</span>`;
-  const latestYear = latestLcsdYear(item);
-  const showYear = lcsd.year && (lcsd.year !== latestYear || lcsd.year < new Date().getFullYear());
-  const extra = showYear ? `${lcsd.code} · ${lcsd.year}` : lcsd.code;
-  return `<span class="badge ok">${escapeHtml(`${band.label}（${extra}）`)}</span>`;
+  const bits = [lcsd.code];
+  if (lcsd.year) bits.push(String(lcsd.year));
+  if (lcsd.delta) bits.push(`+${lcsd.delta}年`);
+  return `<span class="badge ok">${escapeHtml(`${band.label}（${bits.join(" · ")}）`)}</span>`;
 }
 
 function searchLinks(name) {
@@ -691,6 +788,7 @@ async function boot() {
     snapshot = await rankRes.json();
     buildScoredRanks();
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
+    indexLcsdDocCodes();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
     meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名`;
   } catch (err) {
