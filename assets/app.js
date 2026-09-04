@@ -243,24 +243,111 @@ function parseNames(raw) {
   return names;
 }
 
-function readSharedNames() {
-  const search = new URLSearchParams(location.search);
+function shareParams() {
   const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
-  const raw = search.get("n") || hash.get("n") || "";
-  return parseNames(raw.replace(/[,，]/g, "\n"));
+  const search = new URLSearchParams(location.search);
+  return {
+    s: search.get("s") || hash.get("s") || "",
+    n: search.get("n") || hash.get("n") || "",
+  };
 }
 
-function shareUrlFor(names) {
+function toBase64Url(bytes) {
+  let bin = "";
+  bytes.forEach((b) => {
+    bin += String.fromCharCode(b);
+  });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromBase64Url(text) {
+  const pad = "=".repeat((4 - (text.length % 4)) % 4);
+  const bin = atob(String(text).replace(/-/g, "+").replace(/_/g, "/") + pad);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function namesToBytes(names) {
+  const text = names.join("\n");
+  const bytes = new Uint8Array(text.length * 2);
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    bytes[i * 2] = code >> 8;
+    bytes[i * 2 + 1] = code & 255;
+  }
+  return bytes;
+}
+
+function bytesToNames(bytes) {
+  let text = "";
+  for (let i = 0; i + 1 < bytes.length; i += 2) {
+    text += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
+  }
+  return parseNames(text);
+}
+
+async function deflateRaw(bytes) {
+  const stream = new CompressionStream("deflate-raw");
+  const writer = stream.writable.getWriter();
+  await writer.write(bytes);
+  await writer.close();
+  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+}
+
+async function inflateRaw(bytes) {
+  const stream = new DecompressionStream("deflate-raw");
+  const writer = stream.writable.getWriter();
+  await writer.write(bytes);
+  await writer.close();
+  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+}
+
+async function encodeSharePayload(names) {
+  const raw = namesToBytes(names);
+  let best = "1" + toBase64Url(raw);
+  if (typeof CompressionStream === "function") {
+    try {
+      const packed = "2" + toBase64Url(await deflateRaw(raw));
+      if (packed.length < best.length) best = packed;
+    } catch {
+      // Keep the uncompressed payload.
+    }
+  }
+  return best;
+}
+
+async function decodeSharePayload(token) {
+  if (!token) return [];
+  try {
+    const kind = token[0];
+    const bytes = fromBase64Url(token.slice(1));
+    const raw = kind === "2" ? await inflateRaw(bytes) : bytes;
+    return bytesToNames(raw);
+  } catch {
+    return [];
+  }
+}
+
+async function readSharedNames() {
+  const { s, n } = shareParams();
+  if (s) return decodeSharePayload(s);
+  return parseNames(n.replace(/[,，]/g, "\n"));
+}
+
+async function shareUrlFor(names) {
   const url = new URL(location.href);
   url.hash = "";
-  if (names.length) url.searchParams.set("n", names.join("\n"));
-  else url.searchParams.delete("n");
+  url.searchParams.delete("n");
+  if (names.length) url.searchParams.set("s", await encodeSharePayload(names));
+  else url.searchParams.delete("s");
   return url;
 }
 
-function syncShareUrl(names) {
-  const url = shareUrlFor(names);
+async function syncShareUrl(names) {
+  const url = await shareUrlFor(names);
   if (url.href !== location.href) history.replaceState(null, "", url);
+  return url;
 }
 
 function setShareStatus(text) {
@@ -274,8 +361,7 @@ async function copyShareLink() {
     setShareStatus("請先輸入球員名單。");
     return;
   }
-  const url = shareUrlFor(names);
-  history.replaceState(null, "", url);
+  const url = await syncShareUrl(names);
   try {
     await navigator.clipboard.writeText(url.href);
     setShareStatus("已複製分享連結，對方打開就會自動查詢呢份名單。");
@@ -1015,9 +1101,9 @@ function openHkttaSearch(name) {
   document.getElementById("hktta-search").submit();
 }
 
-function runSearch() {
+async function runSearch() {
   const names = parseNames(document.getElementById("names").value);
-  syncShareUrl(names);
+  await syncShareUrl(names);
   if (!names.length) {
     lastResults = [];
     document.getElementById("summary").classList.add("hidden");
@@ -1092,7 +1178,7 @@ async function boot() {
     return;
   }
 
-  const shared = readSharedNames();
+  const shared = await readSharedNames();
   if (shared.length) {
     document.getElementById("names").value = shared.join("\n");
   }
@@ -1123,7 +1209,7 @@ async function boot() {
     if (!btn) return;
     openHkttaSearch(btn.getAttribute("data-hktta"));
   });
-  runSearch();
+  await runSearch();
 }
 
 boot();
