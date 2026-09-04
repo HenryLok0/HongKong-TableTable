@@ -24,4 +24,14 @@ Open `http://localhost:8080`.
 2. Settings → Pages → Deploy from a branch → `main` / `/ (root)`.
 3. Site URL: `https://<user>.github.io/HongKong-TableTable/`
 
-Enable **Actions** write permission if you want weekly ranking updates (`.github/workflows/update-rankings.yml`).
+## Auto update
+
+GitHub Pages is static, so the site cannot scrape HKTTA/LCSD in the browser. `.github/workflows/update-rankings.yml` runs every day at 10:00 HKT (`cron: 0 2 * * *`) and on manual **Actions → Update ranking data → Run workflow**.
+
+Required on GitHub:
+
+1. Settings → Actions → General → Workflow permissions → **Read and write**.
+2. Keep Actions enabled on the default branch. Scheduled workflows only run after the file is on that branch.
+3. First push of this workflow, then optionally run it once by hand to confirm.
+
+The job downloads the latest HKTTA ranking PDFs and LCSD table tennis PDFs, writes `data/rankings.json` and `data/lcsd.json`, and commits if they changed. Old LCSD documents are kept so history is not wiped when the listing page only shows the current year.

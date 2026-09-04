@@ -9,6 +9,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,7 @@ OUT_PATH = ROOT / "data" / "lcsd.json"
 EXTRA_PATH = ROOT / "data" / "lcsd_extra_urls.json"
 SEARCH_URL = "https://www.lcsd.gov.hk/clpss/tc/search/common/searchResult.do"
 PORTAL_URL = "https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do"
+HKT = timezone(timedelta(hours=8))
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -267,9 +269,29 @@ def main() -> None:
                     }
                 )
 
+    if OUT_PATH.exists():
+        old = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+        current_urls = {d["url"] for d in parsed_docs}
+        kept = 0
+        for doc in old.get("documents", []):
+            url = doc.get("url")
+            if url and url not in current_urls:
+                parsed_docs.append(doc)
+                current_urls.add(url)
+        for name, recs in (old.get("players") or {}).items():
+            existing = {(r.get("url"), r.get("group"), r.get("year")) for r in players.get(name, [])}
+            for rec in recs:
+                key = (rec.get("url"), rec.get("group"), rec.get("year"))
+                if rec.get("url") and key not in existing:
+                    players[name].append(rec)
+                    existing.add(key)
+                    kept += 1
+        print(f"kept {kept} historical LCSD name rows")
+
     payload = {
         "source": "康樂及文化事務署地區分齡乒乓球比賽（賽程表／成績 PDF）",
         "sourceUrl": PORTAL_URL,
+        "updated": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
         "documents": parsed_docs,
         "players": players,
     }

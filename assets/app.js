@@ -41,11 +41,32 @@ const HKTTA_AGE = {
   U21: "21-25",
 };
 
+// LCSD ranges that span two display bands use the older band.
 const LCSD_AGE = {
-  MY5: "u9",
-  FY5: "u9",
+  MA: "60+",
+  FA: "60+",
+  MAA: "60+",
+  FAA: "60+",
+  MB: "51-60",
+  FB: "51-60",
+  MC: "41-50",
+  FC: "41-50",
+  MD: "31-40",
+  FD: "31-40",
+  ME: "21-25",
+  FE: "21-25",
+  MF: "16-20",
+  FF: "16-20",
+  MG: "10-15",
+  FG: "10-15",
+  MH: "10-15",
+  FH: "10-15",
+  MI: "10-15",
+  FI: "10-15",
   MJ: "u9",
   FJ: "u9",
+  MY5: "u9",
+  FY5: "u9",
   MY4: "10-15",
   FY4: "10-15",
   MY3: "10-15",
@@ -54,26 +75,6 @@ const LCSD_AGE = {
   FY2: "10-15",
   MY1: "16-20",
   FY1: "16-20",
-  MG: "16-20",
-  FG: "16-20",
-  MA2: "21-25",
-  FA2: "21-25",
-  MA1: "26-30",
-  FA1: "26-30",
-  ME: "26-30",
-  FE: "26-30",
-  MS3: "31-40",
-  FS3: "31-40",
-  MB: "31-40",
-  FB: "31-40",
-  MS2: "41-50",
-  FS2: "41-50",
-  MC: "41-50",
-  FC: "41-50",
-  MA: "51-60",
-  FA: "51-60",
-  MAA: "60+",
-  FAA: "60+",
 };
 
 const MALE_CHARS = new Set(
@@ -100,7 +101,6 @@ const FILTERS = [
 let snapshot = null;
 let lcsdIndex = { players: {} };
 let lastResults = [];
-let filtersBuilt = false;
 
 function loadSettings() {
   try {
@@ -170,16 +170,35 @@ function overall(player) {
   return player.rankings.ALL || null;
 }
 
-function formatRank(player, totals) {
+function playerPoints(player) {
+  return player.points ?? overall(player)?.points ?? 0;
+}
+
+function buildScoredRanks() {
+  for (const gender of ["M", "F"]) {
+    const list = snapshot.players.filter((p) => p.gender === gender && playerPoints(p) >= 1);
+    list.sort((a, b) => (overall(a)?.rank || 9e9) - (overall(b)?.rank || 9e9));
+    const total = list.length;
+    list.forEach((player, idx) => {
+      player.scoredRank = idx + 1;
+      player.scoredTotal = total;
+    });
+  }
+}
+
+function formatRank(player) {
   const all = overall(player);
   if (!all) return "今期總榜未見";
-  const totalKey = `${player.gender}-ALL`;
-  const total = totals[totalKey];
-  const pct = total ? Math.max(0, Math.round((1 - all.rank / total) * 1000) / 10) : null;
   const label = player.gender === "F" ? "女子" : "男子";
-  return total
-    ? `${label}第 ${all.rank} / ${total}（約高於 ${pct}% 上榜球員）`
-    : `${label}第 ${all.rank}`;
+  const points = playerPoints(player);
+  if (points < 1) {
+    return `${label}官方第 ${all.rank}（0分，不計入有積分排名）`;
+  }
+  const rank = player.scoredRank || all.rank;
+  const total = player.scoredTotal;
+  if (!total) return `${label}第 ${rank}`;
+  const pct = Math.max(0, Math.round((1 - rank / total) * 1000) / 10);
+  return `${label}第 ${rank} / ${total}（約高於 ${pct}% 有積分球員）`;
 }
 
 function levelText(player) {
@@ -251,14 +270,46 @@ function classify(item) {
   return "none";
 }
 
-function ageBand(item) {
-  const youngest = item.matches[0]?.age?.youngestGroup;
-  if (youngest && HKTTA_AGE[youngest]) return HKTTA_AGE[youngest];
+function ageRank(id) {
+  const idx = AGE_BANDS.findIndex((b) => b.id === id);
+  return idx < 0 ? 99 : idx;
+}
+
+function olderBand(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return ageRank(a) <= ageRank(b) ? a : b;
+}
+
+function lcsdAgeFromItem(item) {
+  let band = "";
+  let code = "";
   for (const rec of item.lcsd) {
-    const code = String(rec.group || "").toUpperCase();
-    if (LCSD_AGE[code]) return LCSD_AGE[code];
+    const group = String(rec.group || "").toUpperCase();
+    const mapped = LCSD_AGE[group];
+    if (!mapped) continue;
+    if (!band || ageRank(mapped) < ageRank(band)) {
+      band = mapped;
+      code = group;
+    }
   }
-  return "";
+  return { band, code };
+}
+
+function ageBand(item) {
+  const lcsd = lcsdAgeFromItem(item);
+  const hktta = HKTTA_AGE[item.matches[0]?.age?.youngestGroup] || "";
+  if (lcsd.band && hktta) return olderBand(lcsd.band, hktta);
+  return lcsd.band || hktta || "";
+}
+
+function ageBadge(item) {
+  const id = ageBand(item);
+  const band = AGE_BANDS.find((b) => b.id === id);
+  if (!band) return "";
+  const lcsd = lcsdAgeFromItem(item);
+  const text = lcsd.code ? `${band.label}（${lcsd.code}）` : band.label;
+  return `<span class="badge ok">${escapeHtml(text)}</span>`;
 }
 
 function searchLinks(name) {
@@ -327,7 +378,6 @@ function renderCard(item, totals, orderLabel) {
   const bucket = classify(item);
   const bucketText = divisionLabel(bucket);
   const lcsdHtml = renderLcsd(item.lcsd);
-  const age = AGE_BANDS.find((b) => b.id === ageBand(item));
 
   if (!item.matches.length) {
     const tone = item.lcsd.length ? "lcsd" : "missing";
@@ -336,7 +386,7 @@ function renderCard(item, totals, orderLabel) {
         <div>
           <h2>${escapeHtml(item.query)}</h2>
           ${genderBadge(item)}
-          ${age ? `<span class="badge ok">${escapeHtml(age.label)}</span>` : ""}
+          ${ageBadge(item)}
           <span class="badge ${item.lcsd.length ? "ok" : "miss"}">${escapeHtml(bucketText)}</span>
         </div>
         <div>${escapeHtml(orderLabel)}</div>
@@ -358,8 +408,7 @@ function renderCard(item, totals, orderLabel) {
           <div>
             <h2>${escapeHtml(player.name)}</h2>
             ${genderBadge(item)}
-            <span class="badge ok">${escapeHtml(player.age.label)}</span>
-            ${age ? `<span class="badge ok">${escapeHtml(age.label)}</span>` : ""}
+            ${ageBadge(item)}
             <span class="badge ok">${escapeHtml(bucketText)}</span>
           </div>
           <div>${escapeHtml(orderLabel)}</div>
@@ -367,11 +416,10 @@ function renderCard(item, totals, orderLabel) {
         ${sameName}
         <div class="grid">
           <div><span>乒總積分</span><b>${player.points ?? all?.points ?? "—"}</b></div>
-          <div><span>全港排名</span><b>${formatRank(player, totals)}</b></div>
+          <div><span>全港排名</span><b>${formatRank(player)}</b></div>
           <div><span>教練／球會／學校</span><b>${escapeHtml([player.coach, player.club, player.school].filter(Boolean).join(" · ") || "榜上未列")}</b></div>
         </div>
         <p>${levelText(player)}</p>
-        <p>${escapeHtml(player.age.note)}</p>
         <div class="ranks">${rankChips(player)}</div>
         ${lcsdHtml}
         <div class="links">${renderLinks(player.name)}</div>
@@ -411,13 +459,35 @@ function passesFilter(item) {
   return true;
 }
 
-function buildFilters() {
-  if (filtersBuilt) return;
-  document.getElementById("filter-box").innerHTML = FILTERS.map(
-    (f) =>
-      `<label class="choice"><input type="checkbox" data-group="${f.group}" value="${f.id}" /> ${escapeHtml(f.label)}</label>`
-  ).join("");
-  filtersBuilt = true;
+function filterHasPeople(filter, results) {
+  if (filter.group === "gender") {
+    return results.some((item) => inferGender(item).gender === filter.id);
+  }
+  if (filter.group === "bucket") {
+    return results.some((item) => classify(item) === filter.id);
+  }
+  if (filter.group === "age") {
+    return results.some((item) => ageBand(item) === filter.id);
+  }
+  if (filter.id === "has-lcsd") {
+    return results.some((item) => item.lcsd.length);
+  }
+  return true;
+}
+
+function buildFilters(results) {
+  const box = document.getElementById("filter-box");
+  const selected = new Set(
+    [...box.querySelectorAll("input:checked")].map((el) => `${el.dataset.group}:${el.value}`)
+  );
+  const visible = FILTERS.filter((f) => filterHasPeople(f, results));
+  box.innerHTML = visible
+    .map((f) => {
+      const key = `${f.group}:${f.id}`;
+      const checked = selected.has(key) ? " checked" : "";
+      return `<label class="choice"><input type="checkbox" data-group="${f.group}" value="${f.id}"${checked} /> ${escapeHtml(f.label)}</label>`;
+    })
+    .join("");
 }
 
 function updateStats(results) {
@@ -455,7 +525,7 @@ function updateStats(results) {
 
 function renderResults() {
   if (!lastResults.length) return;
-  buildFilters();
+  buildFilters(lastResults);
   document.getElementById("breakdown").classList.remove("hidden");
   updateStats(lastResults);
 
@@ -553,9 +623,11 @@ async function boot() {
     ]);
     if (!rankRes.ok) throw new Error(rankRes.statusText);
     snapshot = await rankRes.json();
+    buildScoredRanks();
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
-    meta.textContent = `目前資料：乒總 ${snapshot.period} 期（列印 ${snapshot.printed || "—"}，${snapshot.players.length} 人）· 康文署 PDF ${lcsdCount} 個姓名`;
+    const updated = snapshot.updated || lcsdIndex.updated || "—";
+    meta.textContent = `目前資料：乒總 ${snapshot.period} 期（列印 ${snapshot.printed || "—"}，${snapshot.players.length} 人）· 康文署 PDF ${lcsdCount} 個姓名 · 上次更新 ${updated}`;
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
     console.error(err);

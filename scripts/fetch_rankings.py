@@ -7,10 +7,13 @@ import re
 import ssl
 import tempfile
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = ROOT / "data" / "rankings.json"
+
+HKT = timezone(timedelta(hours=8))
 
 BASE = "https://hktta.org.hk/registered_player/past_record/rankingList"
 USER_AGENT = (
@@ -72,15 +75,17 @@ def http_get(url: str) -> tuple[int, bytes]:
         return exc.code, exc.read() if exc.fp else b""
 
 
-def find_latest_period(year: int = 2026) -> str:
-    for n in range(12, 0, -1):
-        period = f"{year}-{n:02d}"
-        url = f"{BASE}/{period}/Men-All.pdf"
-        code, body = http_get(url)
-        if code == 200 and body.startswith(b"%PDF"):
-            print(f"found {period} ({len(body)} bytes)")
-            return period
-        print(f"skip {period} ({code})")
+def find_latest_period() -> str:
+    year = datetime.now(HKT).year
+    for y in (year, year - 1):
+        for n in range(12, 0, -1):
+            period = f"{y}-{n:02d}"
+            url = f"{BASE}/{period}/Men-All.pdf"
+            code, body = http_get(url)
+            if code == 200 and body.startswith(b"%PDF"):
+                print(f"found {period} ({len(body)} bytes)")
+                return period
+            print(f"skip {period} ({code})")
     raise SystemExit("No ranking PDF period found")
 
 
@@ -253,6 +258,7 @@ def main() -> None:
         "sourceUrl": "https://www.hktta.org.hk/registered_player/past_record/index.html",
         "period": period,
         "printed": printed,
+        "updated": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
         "totals": totals,
         "players": players,
     }
