@@ -433,9 +433,16 @@ function bestPoints(matches) {
   return values.length ? Math.max(...values) : -1;
 }
 
-function bestRank(item) {
-  const ranks = item.matches.map((p) => overall(p)?.rank).filter((n) => typeof n === "number");
-  return ranks.length ? Math.min(...ranks) : 9e9;
+function hasRecord(item) {
+  return Boolean(item.matches.length || item.lcsd.length);
+}
+
+function compareByListRank(a, b) {
+  const dataDiff = Number(hasRecord(b)) - Number(hasRecord(a));
+  if (dataDiff) return dataDiff;
+  const rankDiff = bestRank(a) - bestRank(b);
+  if (rankDiff) return rankDiff;
+  return bestPoints(b.matches) - bestPoints(a.matches);
 }
 
 function selectedFilters(group) {
@@ -533,19 +540,11 @@ function renderResults() {
   const mode = sortMode();
   const sorted = filtered.map((item, idx) => ({ item, listIndex: lastResults.indexOf(item) }));
   if (mode === "rank") {
-    sorted.sort((a, b) => {
-      const rankDiff = bestRank(a.item) - bestRank(b.item);
-      if (rankDiff) return rankDiff;
-      return bestPoints(b.item.matches) - bestPoints(a.item.matches);
-    });
+    sorted.sort((a, b) => compareByListRank(a.item, b.item));
   }
 
   const strengthOrder = [...lastResults]
-    .sort((a, b) => {
-      const rankDiff = bestRank(a) - bestRank(b);
-      if (rankDiff) return rankDiff;
-      return bestPoints(b.matches) - bestPoints(a.matches);
-    })
+    .sort(compareByListRank)
     .map((item, i) => [item.query, i + 1]);
   const strengthMap = new Map(strengthOrder);
 
