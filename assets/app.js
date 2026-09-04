@@ -314,11 +314,20 @@ function findLcsd(query) {
   return lcsdIndex.players[key] || [];
 }
 
+function lcsdGenderFromGroup(rec) {
+  const code = String(rec.group || "").toUpperCase();
+  if (!code) return "";
+  if (code[1] === "X" || code === "DN") return "";
+  if (schemeForRecord(rec) === "wts" && code === "MF") return "";
+  if (code.startsWith("M")) return "M";
+  if (code.startsWith("F")) return "F";
+  return "";
+}
+
 function recordedGender(item) {
-  if (item.matches[0]) return item.matches[0].gender;
-  const groups = item.lcsd.map((r) => r.group || "").join(" ");
-  if (/\bM[A-Z]/.test(groups)) return "M";
-  if (/\bF[A-Z]/.test(groups)) return "F";
+  if (item.matches[0]?.gender) return item.matches[0].gender;
+  const genders = new Set((item.lcsd || []).map(lcsdGenderFromGroup).filter(Boolean));
+  if (genders.size === 1) return [...genders][0];
   return "";
 }
 
