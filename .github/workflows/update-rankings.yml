@@ -28,11 +28,14 @@ jobs:
       - name: Fetch LCSD records
         run: python scripts/fetch_lcsd.py
         continue-on-error: true
+      - name: Fetch Hang Seng badge exams
+        run: python scripts/fetch_badges.py
+        continue-on-error: true
       - name: Commit snapshot if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/rankings.json data/lcsd.json data/lcsd_age_maps.json
+          git add data/rankings.json data/lcsd.json data/lcsd_age_maps.json data/badges.json
           if git diff --staged --quiet; then
             echo "No data changes"
             exit 0

@@ -168,6 +168,7 @@ const FILTERS = [
 
 let snapshot = null;
 let lcsdIndex = { players: {} };
+let badgeIndex = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
@@ -312,6 +313,11 @@ function findMatches(query, players) {
 function findLcsd(query) {
   const key = normalizeName(query);
   return lcsdIndex.players[key] || [];
+}
+
+function findBadges(query) {
+  const key = normalizeName(query);
+  return badgeIndex.players[key] || [];
 }
 
 function lcsdGenderFromGroup(rec) {
@@ -511,7 +517,10 @@ function searchLinks(name) {
   const q = encodeURIComponent(name);
   return [
     { label: "乒總球員搜尋", kind: "hktta" },
-    { label: "康文署分齡比賽頁", href: "https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do" },
+    {
+      label: "恒生章別考試",
+      href: "https://hstta.hktta.org.hk/training_detail.php?id=10",
+    },
     {
       label: "Google：康文署分齡",
       href: `https://www.google.com/search?q=${q}+site%3Alcsd.gov.hk+乒乓球+分齡`,
@@ -549,6 +558,50 @@ function lcsdKindLabel(kind) {
   return kind || "文件";
 }
 
+function badgeRank(label) {
+  if (label.includes("鑽章（二）") || label.includes("鑽章(二)")) return 6;
+  if (label.includes("鑽")) return 5;
+  if (label.includes("白金")) return 4;
+  if (label.includes("金")) return 3;
+  if (label.includes("銀")) return 2;
+  if (label.includes("銅")) return 1;
+  return 0;
+}
+
+function bestBadge(records) {
+  const passed = records.filter((r) => r.passed);
+  const pool = passed.length ? passed : records;
+  return [...pool].sort((a, b) => {
+    const rank = badgeRank(b.badge) - badgeRank(a.badge);
+    if (rank) return rank;
+    return String(b.session).localeCompare(String(a.session));
+  })[0] || null;
+}
+
+function badgeChip(item) {
+  const best = bestBadge(item.badges || []);
+  if (!best) return "";
+  const text = best.passed ? `恒生${best.badge}` : `報考${best.badge}`;
+  return `<span class="badge ok">${escapeHtml(text)}</span>`;
+}
+
+function renderBadges(records) {
+  if (!records.length) return "";
+  const items = [...records]
+    .sort((a, b) => String(b.session).localeCompare(String(a.session)))
+    .map((r) => {
+      let status = "已報考";
+      if (r.passed === true) status = "考獲資格";
+      else if (r.absent) status = "缺席";
+      else if (r.passed === false) status = "未合格";
+      const bits = [r.session, r.badge, status].filter(Boolean);
+      const href = r.listUrl || r.url;
+      return `<li><a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a></li>`;
+    })
+    .join("");
+  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span><ul>${items}</ul></div>`;
+}
+
 function renderLcsd(records) {
   if (!records.length) return "";
   const items = [...records]
@@ -574,23 +627,29 @@ function renderCard(item, totals, orderLabel) {
   const bucket = classify(item);
   const bucketText = divisionLabel(bucket);
   const lcsdHtml = renderLcsd(item.lcsd);
+  const badgeHtml = renderBadges(item.badges || []);
 
   if (!item.matches.length) {
-    const tone = item.lcsd.length ? "lcsd" : "missing";
+    const hasExtra = item.lcsd.length || (item.badges || []).length;
+    const tone = hasExtra ? "lcsd" : "missing";
     return `<article class="card ${tone}">
       <div class="card-top">
         <div>
           <h2>${escapeHtml(item.query)}</h2>
           ${genderBadge(item)}
           ${ageBadge(item)}
-          <span class="badge ${item.lcsd.length ? "ok" : "miss"}">${escapeHtml(bucketText)}</span>
+          ${badgeChip(item)}
+          <span class="badge ${hasExtra ? "ok" : "miss"}">${escapeHtml(bucketText)}</span>
         </div>
         <div>${escapeHtml(orderLabel)}</div>
       </div>
       <p>${item.lcsd.length
         ? "今期乒總公布榜未見，但康文署分齡賽程／成績 PDF 有呢個名。"
-        : "今期乒總公布榜同已收入嘅康文署 PDF 都未見。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。"}</p>
+        : (item.badges || []).length
+          ? "今期乒總公布榜未見，但恒生公開章別考試時間表有呢個名。"
+          : "今期乒總公布榜同已收入嘅康文署 PDF 都未見。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。"}</p>
       ${lcsdHtml}
+      ${badgeHtml}
       <div class="links">${renderLinks(item.query)}</div>
     </article>`;
   }
@@ -605,6 +664,7 @@ function renderCard(item, totals, orderLabel) {
             <h2><button type="button" class="name-link" data-hktta="${escapeHtml(player.name)}">${escapeHtml(player.name)}</button></h2>
             ${genderBadge(item)}
             ${ageBadge(item)}
+            ${badgeChip(item)}
             <span class="badge ok">${escapeHtml(bucketText)}</span>
           </div>
           <div>${escapeHtml(orderLabel)}</div>
@@ -618,6 +678,7 @@ function renderCard(item, totals, orderLabel) {
         <p>${levelText(player)}</p>
         <div class="ranks">${rankChips(player)}</div>
         ${lcsdHtml}
+        ${badgeHtml}
         <div class="links">${renderLinks(player.name)}</div>
       </article>`;
     })
@@ -635,7 +696,7 @@ function bestRank(item) {
 }
 
 function hasRecord(item) {
-  return Boolean(item.matches.length || item.lcsd.length);
+  return Boolean(item.matches.length || item.lcsd.length || (item.badges || []).length);
 }
 
 function compareByListRank(a, b) {
@@ -798,6 +859,7 @@ function runSearch() {
     query,
     matches: findMatches(query, snapshot.players),
     lcsd: findLcsd(query),
+    badges: findBadges(query),
   }));
   renderResults();
 }
@@ -838,19 +900,22 @@ async function boot() {
   bootSettings();
   const meta = document.getElementById("data-meta");
   try {
-    const [rankRes, lcsdRes, ageMapRes] = await Promise.all([
+    const [rankRes, lcsdRes, ageMapRes, badgeRes] = await Promise.all([
       fetch("data/rankings.json"),
       fetch("data/lcsd.json"),
       fetch("data/lcsd_age_maps.json"),
+      fetch("data/badges.json"),
     ]);
     if (!rankRes.ok) throw new Error(rankRes.statusText);
     snapshot = await rankRes.json();
     buildScoredRanks();
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
+    if (badgeRes.ok) badgeIndex = await badgeRes.json();
     indexLcsdDocCodes();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
-    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名`;
+    const badgeCount = Object.keys(badgeIndex.players || {}).length;
+    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名 · 恒生章別 ${badgeCount} 人`;
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
     console.error(err);
