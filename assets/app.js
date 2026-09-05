@@ -1714,6 +1714,20 @@ function setNamesEditorOpen(open, focus = false) {
   if (open && focus) document.getElementById("names").focus();
 }
 
+async function logSearch(names) {
+  if (!canUseWorkerApi() || shareParams().skipLog || !names.length) return;
+  try {
+    await fetch(apiUrl("api/log"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ names }),
+      keepalive: true,
+    });
+  } catch {
+    // Logging must not block search.
+  }
+}
+
 async function runSearch() {
   const names = parseNames(document.getElementById("names").value);
   if (!names.length) {
@@ -1738,6 +1752,7 @@ async function runSearch() {
       setNamesEditorOpen(false);
       renderResults();
       syncShareUrl(names).catch(() => {});
+      logSearch(names);
       return;
     } catch (err) {
       console.error(err);
@@ -1757,6 +1772,7 @@ async function runSearch() {
   setNamesEditorOpen(false);
   renderResults();
   syncShareUrl(names).catch(() => {});
+  logSearch(names);
 }
 
 function applyTheme(dark) {

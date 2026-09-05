@@ -224,7 +224,7 @@ function adminPage(rows) {
     h1 { margin: 0; font-family: "Noto Serif TC", serif; font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--heading); }
     h2 { margin: 0; font-size: 1.05rem; color: var(--heading); }
     .hint, .empty { color: var(--muted); }
-    .stat { display: inline-block; margin: 1rem 0 0; padding: .45rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: .9rem; }
+    .stat { display: inline-flex; gap: .75rem; align-items: center; margin: 1rem 0 0; padding: .45rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: .9rem; }
     .panel { margin-top: 1.4rem; padding: 1rem 1.1rem 1.15rem; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
     .head-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: .25rem; }
@@ -255,8 +255,8 @@ function adminPage(rows) {
   <main>
     <p class="eyebrow">Admin</p>
     <h1>查詢紀錄</h1>
-    <p class="hint">只有你睇到。主站冇呢頁連結。</p>
-    <p class="stat">共 <b>${rows.length}</b> 次查詢</p>
+    <p class="hint">只有你睇到。主站冇呢頁連結。用家一查詢就會記入，唔使撳分享。呢頁要重新整理先見到新紀錄。</p>
+    <p class="stat">共 <b>${rows.length}</b> 次查詢 <button class="btn danger" type="button" id="reload-admin">重新整理</button></p>
     <section class="panel">
       <div class="head-row">
         <h2>最近查詢</h2>
@@ -288,6 +288,7 @@ function adminPage(rows) {
       }
       location.reload();
     }
+    document.getElementById("reload-admin")?.addEventListener("click", () => location.reload());
     document.getElementById("pick-all")?.addEventListener("change", (event) => {
       const on = event.target.checked;
       document.querySelectorAll(".card .pick input").forEach((el) => { el.checked = on; });
@@ -582,6 +583,18 @@ export default {
       return new Response(adminPage(rows), { headers });
     }
 
+    if (path === "/api/log") {
+      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+      if (request.method !== "POST") return new Response("POST only", { status: 405 });
+      try {
+        const body = await request.json();
+        await logQueries(env, Array.isArray(body.names) ? body.names : []);
+        return json({ ok: true });
+      } catch (err) {
+        return json({ error: String(err) }, { status: 502 });
+      }
+    }
+
     if (path === "/api/lookup") {
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204 });
@@ -592,7 +605,6 @@ export default {
       try {
         const body = await request.json();
         const names = Array.isArray(body.names) ? body.names : [];
-        if (body.log !== false) ctx.waitUntil(logQueries(env, names));
         const index = await getIndex(ctx);
         return json(lookupNames(index, names));
       } catch (err) {
