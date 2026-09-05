@@ -458,6 +458,29 @@ button.ghost {
   margin: 0 0 8px;
 }
 
+.setting-theme {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.setting-theme legend {
+  padding: 0;
+  margin: 0 0 6px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.theme-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.theme-choices .choice {
+  font-weight: 600;
+}
+
 [data-theme="dark"] .card.missing {
   background: #2a1f21;
   border-color: #5a3a3a;

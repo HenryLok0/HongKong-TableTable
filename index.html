@@ -29,18 +29,22 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="assets/styles.css?v=20260905m" />
+  <link rel="stylesheet" href="assets/styles.css?v=20260905n" />
 </head>
 
 <body>
   <div class="settings">
     <button id="settings-btn" type="button" class="ghost">設定</button>
     <div id="settings-panel" class="settings-panel hidden" role="menu">
-      <label class="setting-row">
-        <input type="checkbox" id="theme-toggle" />
-        黑白模式
-      </label>
-      <p class="hint">未手動揀過會跟系統。揀咗之後先記住你嘅選擇。</p>
+      <fieldset class="setting-theme">
+        <legend>外觀</legend>
+        <div class="theme-choices">
+          <label class="choice"><input type="radio" name="theme" value="system" /> 跟系統</label>
+          <label class="choice"><input type="radio" name="theme" value="light" /> 淺色</label>
+          <label class="choice"><input type="radio" name="theme" value="dark" /> 深色</label>
+        </div>
+      </fieldset>
+      <p class="hint">跟系統會跟住電腦／手機嘅淺色或深色。揀淺色或深色之後先記住你嘅選擇。</p>
       <label class="setting-row">
         <input type="checkbox" id="guess-gender" />
         估計男女名字／年齡組別
@@ -140,7 +144,7 @@
     <input type="hidden" name="error" value="" />
   </form>
 
-  <script src="assets/app.js?v=20260905l"></script>
+  <script src="assets/app.js?v=20260905n"></script>
 </body>
 
 </html>

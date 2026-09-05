@@ -210,6 +210,7 @@ function loadSettings() {
 
 function saveSettings(partial) {
   const next = { ...loadSettings(), ...partial };
+  if ("theme" in partial) delete next.dark;
   localStorage.setItem("hktt-settings", JSON.stringify(next));
 }
 
@@ -1461,8 +1462,26 @@ function prefersDark() {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function hasStoredTheme() {
-  return Object.prototype.hasOwnProperty.call(loadSettings(), "dark");
+function themePreference(saved = loadSettings()) {
+  if (saved.theme === "light" || saved.theme === "dark" || saved.theme === "system") {
+    return saved.theme;
+  }
+  if (Object.prototype.hasOwnProperty.call(saved, "dark")) {
+    return saved.dark ? "dark" : "light";
+  }
+  return "system";
+}
+
+function applyThemePreference(pref) {
+  if (pref === "dark") applyTheme(true);
+  else if (pref === "light") applyTheme(false);
+  else applyTheme(prefersDark());
+}
+
+function syncThemeRadios(pref) {
+  document.querySelectorAll('input[name="theme"]').forEach((el) => {
+    el.checked = el.value === pref;
+  });
 }
 
 const EXPORT_HEADERS = ["姓名", "組別", "全港排名", "排名升跌", "積分", "積分升跌", "恒生章別"];
@@ -1550,16 +1569,14 @@ function printResultsTable() {
 
 function bootSettings() {
   const saved = loadSettings();
-  const themeEl = document.getElementById("theme-toggle");
   const guessEl = document.getElementById("guess-gender");
-  const dark = hasStoredTheme() ? Boolean(saved.dark) : prefersDark();
-  themeEl.checked = dark;
+  const pref = themePreference(saved);
   guessEl.checked = Boolean(saved.guessGender);
-  applyTheme(dark);
+  syncThemeRadios(pref);
+  applyThemePreference(pref);
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
-    if (hasStoredTheme()) return;
-    themeEl.checked = event.matches;
+    if (themePreference() !== "system") return;
     applyTheme(event.matches);
   });
 
@@ -1573,9 +1590,12 @@ function bootSettings() {
       document.getElementById("settings-panel").classList.add("hidden");
     }
   });
-  themeEl.addEventListener("change", () => {
-    applyTheme(themeEl.checked);
-    saveSettings({ dark: themeEl.checked });
+  document.querySelectorAll('input[name="theme"]').forEach((el) => {
+    el.addEventListener("change", () => {
+      if (!el.checked) return;
+      saveSettings({ theme: el.value });
+      applyThemePreference(el.value);
+    });
   });
   guessEl.addEventListener("change", () => {
     saveSettings({ guessGender: guessEl.checked });
