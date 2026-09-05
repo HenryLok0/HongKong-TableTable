@@ -97,6 +97,8 @@ function clientMeta(request) {
   if (cf.country) out.country = String(cf.country);
   if (cf.city) out.city = String(cf.city).slice(0, 40);
   if (cf.region) out.region = String(cf.region).slice(0, 40);
+  const district = hkDistrict(out.country, out.city, out.region);
+  if (district) out.district = district;
   if (cf.asOrganization) out.org = String(cf.asOrganization).slice(0, 48);
   if (cf.asn) out.asn = String(cf.asn);
   if (cf.timezone) out.tz = String(cf.timezone).slice(0, 40);
@@ -141,18 +143,67 @@ function countryLabel(code) {
   return map[key] || key;
 }
 
+function foldGeo(text) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
+}
+
+const HK_DISTRICTS = [
+  ["中西區", ["中西", "centralandwestern", "central", "sheungwan", "saiyingpun", "kennedytown", "midlevels", "thepeak", "上環", "西營盤", "堅尼地城", "半山", "太平山"]],
+  ["灣仔區", ["灣仔", "wanchai", "wanchai", "causewaybay", "happyvalley", "admiralty", "銅鑼灣", "跑馬地", "金鐘"]],
+  ["東區", ["東區", "eastern", "northpoint", "quarrybay", "chaiban", "shaukeiwan", "saiwanho", "taikoo", "北角", "鰂魚涌", "柴灣", "筲箕灣", "西灣河", "太古"]],
+  ["南區", ["南區", "southern", "aberdeen", "stanley", "pokfulam", "wahfu", "aplei", "香港仔", "赤柱", "薄扶林", "華富", "鴨脷洲"]],
+  ["油尖旺區", ["油尖旺", "yautsimmong", "yaumatei", "tsimshatsui", "mongkok", "jordan", "taikoktsui", "尖沙咀", "油麻地", "旺角", "佐敦", "大角咀"]],
+  ["深水埗區", ["深水埗", "shamshuipo", "cheungshawan", "meifoo", "長沙灣", "美孚"]],
+  ["九龍城區", ["九龍城", "kowlooncity", "hunghom", "tokwawan", "homantin", "kaitak", "kowloontong", "紅磡", "土瓜灣", "何文田", "啟德", "九龍塘"]],
+  ["黃大仙區", ["黃大仙", "wongtaisin", "diamondhill", "sanpokong", "tszwanshan", "lokfu", "鑽石山", "新蒲崗", "慈雲山", "樂富"]],
+  ["觀塘區", ["觀塘", "kwuntong", "ngautaukok", "lamtin", "yautong", "kowloonbay", "牛頭角", "藍田", "油塘", "九龍灣"]],
+  ["荃灣區", ["荃灣", "tsuenwan", "shamtseng", "深井"]],
+  ["屯門區", ["屯門", "tuenmun"]],
+  ["元朗區", ["元朗", "yuenlong", "tinshuiwai", "天水圍", "kamtin", "錦田"]],
+  ["北區", ["北區", "northdistrict", "sheungshui", "fanling", "taikuiling", "上水", "粉嶺", "打鼓嶺"]],
+  ["大埔區", ["大埔", "taipo"]],
+  ["沙田區", ["沙田", "shatin", "sha tin", "maonshan", "fotan", "馬鞍山", "火炭"]],
+  ["西貢區", ["西貢", "saikung", "tseungkwano", "hanghau", "polam", "將軍澳", "坑口", "寶琳", "調景嶺", "tiukengling"]],
+  ["葵青區", ["葵青", "kwaitsing", "kwaichung", "tsingyi", "葵涌", "青衣"]],
+  ["離島區", ["離島", "islands", "tungchung", "cheungchau", "lantau", "discoverybay", "muiwo", "pengchau", "東涌", "長洲", "大嶼山", "愉景灣", "梅窩", "坪洲"]],
+];
+
+function hkDistrict(country, city, region) {
+  if (String(country || "").toUpperCase() !== "HK") return "";
+  const blob = foldGeo(`${city} ${region}`);
+  if (!blob || blob === "hongkong" || blob === "hk" || blob === "香港") return "";
+  for (const [label, aliases] of HK_DISTRICTS) {
+    for (const alias of aliases) {
+      const key = foldGeo(alias);
+      if (key && blob.includes(key)) return label;
+    }
+  }
+  if (blob.includes("kowloon") || blob.includes("九龍")) return "九龍";
+  if (blob.includes("newterritor") || blob.includes("新界")) return "新界";
+  if (blob.includes("hongkongisland") || blob.includes("港島") || blob.includes("香港島")) return "港島";
+  return "";
+}
+
+function placeLabel(row) {
+  if (row.district) {
+    return String(row.country || "").toUpperCase() === "HK" ? `香港${row.district}` : row.district;
+  }
+  const mapped = hkDistrict(row.country, row.city, row.region);
+  if (mapped) return `香港${mapped}`;
+  const place = [...new Set([row.city, row.region, countryLabel(row.country)].filter(Boolean))];
+  return place.filter((bit) => !/^hong\s*kong$/i.test(bit) && bit !== "HK").join(" ") || countryLabel(row.country);
+}
+
 function formatVisitor(row) {
-  const place = [row.city, row.region, countryLabel(row.country)].filter(Boolean);
-  const uniq = [...new Set(place)];
+  const place = placeLabel(row);
+  const ip = row.ip ? (place ? `${row.ip}（${place}）` : row.ip) : (place || "");
   const net = [row.asn ? "AS" + row.asn : "", row.org].filter(Boolean).join(" ");
   return [
     row.device,
     row.browser,
-    uniq.join(" "),
-    row.ip,
+    ip,
     net,
     row.lang,
-    row.tz,
     row.proto,
     row.ref ? "來源 " + row.ref : "",
   ].map((bit) => String(bit || "").trim()).filter(Boolean).join(" · ");
