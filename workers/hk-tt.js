@@ -287,6 +287,19 @@ async function deleteAllQueryLogs(env) {
   return deleted;
 }
 
+async function deleteAllShortKeys(env) {
+  let cursor;
+  let deleted = 0;
+  do {
+    const page = await env.LINKS.list({ limit: 1000, cursor });
+    const shorts = page.keys.filter((key) => !key.name.startsWith(QUERY_PREFIX));
+    await Promise.all(shorts.map((key) => env.LINKS.delete(key.name)));
+    deleted += shorts.length;
+    cursor = page.list_complete ? "" : page.cursor;
+  } while (cursor);
+  return deleted;
+}
+
 function fromBase64Url(text) {
   const pad = "=".repeat((4 - (text.length % 4)) % 4);
   const bin = atob(String(text).replace(/-/g, "+").replace(/_/g, "/") + pad);
@@ -559,6 +572,7 @@ function adminPage(rows, shortCount) {
       <span class="stat">名單 <b>${counts.size}</b> 個名</span>
       <span class="stat">短連結 <b>${shortCount}</b> 個</span>
       <button class="btn ghost" type="button" id="restore-all"${shortCount ? "" : " disabled"}>由短連結還原日誌</button>
+      <button class="btn danger" type="button" id="del-shorts"${shortCount ? "" : " disabled"}>剷除全部短連結</button>
       <button class="btn ghost" type="button" id="reload-admin">重新整理</button>
     </div>
     <section class="panel" id="log-panel">
@@ -648,7 +662,9 @@ function adminPage(rows, shortCount) {
         }
         const msg = data.restored != null
           ? "由短連結還原咗 " + data.restored + " 次查詢。時間會記成而家。"
-          : "已剷除 " + (data.deleted || 0) + " 次查詢。短連結仍然喺 KV。";
+          : data.shorts
+            ? "已剷除 " + (data.deleted || 0) + " 個短連結。已分享嘅 ?x= 會失效。查詢日誌仍然喺。"
+            : "已剷除 " + (data.deleted || 0) + " 次查詢。短連結仍然喺 KV。";
         sessionStorage.setItem("hktt_admin_flash", msg);
         location.reload();
       } catch {
@@ -702,6 +718,9 @@ function adminPage(rows, shortCount) {
     document.getElementById("restore-all")?.addEventListener("click", (event) => {
       arm(event.currentTarget, "再撳確認還原（時間記成而家）", () => send({ restore: true }));
     });
+    document.getElementById("del-shorts")?.addEventListener("click", (event) => {
+      arm(event.currentTarget, "再撳確認剷除全部短連結", () => send({ shorts: true }));
+    });
     document.querySelectorAll("[data-del]").forEach((btn) => {
       btn.addEventListener("click", (event) => {
         const key = btn.getAttribute("data-del");
@@ -709,7 +728,7 @@ function adminPage(rows, shortCount) {
         arm(event.currentTarget, "再撳確認剷除", () => send({ key }));
       });
     });
-    ["restore-all", "del-picked", "del-all"].forEach((id) => {
+    ["restore-all", "del-picked", "del-all", "del-shorts"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.setAttribute("data-arm", "1");
     });
@@ -997,6 +1016,10 @@ export default {
         if (body.restore) {
           const restored = await restoreQueryLogsFromShorts(env);
           return json({ ok: true, restored });
+        }
+        if (body.shorts) {
+          const deleted = await deleteAllShortKeys(env);
+          return json({ ok: true, shorts: true, deleted });
         }
         const keys = Array.isArray(body.keys) ? body.keys : body.key ? [body.key] : [];
         const valid = keys.map((key) => String(key || "")).filter((key) => key.startsWith(QUERY_PREFIX));
