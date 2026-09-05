@@ -30,7 +30,7 @@ async function tokenId(token) {
 
 async function saveShort(env, token) {
   const id = await tokenId(token);
-  if (!env.LINKS) return { id, stored: false };
+  if (!env.LINKS) return { id, stored: false, reason: "missing LINKS kv" };
   await env.LINKS.put(id, token);
   return { id, stored: true };
 }

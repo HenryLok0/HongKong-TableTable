@@ -456,11 +456,15 @@ async function readSharedNames() {
   return parseNames(n.replace(/[,，]/g, "\n"));
 }
 
+function canUseWorkerApi() {
+  return !/github\.io$/i.test(location.hostname);
+}
+
 async function shareUrlFor(names) {
   const url = pageBase();
   if (!names.length) return url;
   const token = await encodeSharePayload(names);
-  if (edgeLookup) {
+  if (canUseWorkerApi()) {
     try {
       const res = await fetch(apiUrl("api/short"), {
         method: "POST",
@@ -473,9 +477,12 @@ async function shareUrlFor(names) {
           url.searchParams.set("x", data.id);
           return url;
         }
+        url._shortFail = data.reason || "not stored";
+      } else {
+        url._shortFail = `http ${res.status}`;
       }
-    } catch {
-      // Fall back to the full payload.
+    } catch (err) {
+      url._shortFail = String(err);
     }
   }
   url.searchParams.set("s", token);
@@ -502,7 +509,15 @@ async function copyShareLink() {
   const url = await syncShareUrl(names);
   try {
     await navigator.clipboard.writeText(url.href);
-    setShareStatus("已複製分享連結，對方打開就會自動查詢呢份名單。");
+    if (url.searchParams.has("x")) {
+      setShareStatus("已複製短連結，對方打開就會自動查詢呢份名單。");
+    } else if (url._shortFail === "missing LINKS kv") {
+      setShareStatus("已複製長連結。短連結要喺 Cloudflare Worker 繫結 KV，變數名必須係 LINKS。");
+    } else if (url._shortFail) {
+      setShareStatus(`已複製長連結。短連結未生效（${url._shortFail}）。請用 hktt.henrylok.me 打開。`);
+    } else {
+      setShareStatus("已複製分享連結，對方打開就會自動查詢呢份名單。");
+    }
   } catch {
     setShareStatus(url.href);
   }
