@@ -116,6 +116,31 @@ async function readQueryLogs(env) {
   return rows.slice(0, QUERY_LOG_LIMIT);
 }
 
+function namesToBytes(names) {
+  const text = names.join("\n");
+  const bytes = new Uint8Array(text.length * 2);
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    bytes[i * 2] = code >> 8;
+    bytes[i * 2 + 1] = code & 255;
+  }
+  return bytes;
+}
+
+function resultHref(names) {
+  const params = new URLSearchParams();
+  params.set("n", names.join("\n"));
+  params.set("log", "0");
+  return `/?${params}`;
+}
+
+function resultHrefS(name) {
+  const params = new URLSearchParams();
+  params.set("s", `1${toBase64Url(namesToBytes([name]))}`);
+  params.set("log", "0");
+  return `/?${params}`;
+}
+
 function adminPage(rows) {
   const counts = new Map();
   for (const row of rows) {
@@ -123,12 +148,18 @@ function adminPage(rows) {
   }
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-HK")).slice(0, 40);
   const topHtml = top.length
-    ? top.map(([name, n]) => `<li>${escapeHtml(name)}（${n}）</li>`).join("")
+    ? top.map(([name, n]) => `<li><a href="${escapeHtml(resultHrefS(name))}" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>（${n}）</li>`).join("")
     : "<li>未有紀錄</li>";
   const listHtml = rows.length
     ? rows.map((row) => {
       const names = row.names.map((n) => escapeHtml(n)).join("、");
-      return `<article><time>${escapeHtml(formatHkt(row.at))}</time><p>${names}</p></article>`;
+      return `<article>
+        <div>
+          <time>${escapeHtml(formatHkt(row.at))}</time>
+          <p>${names}</p>
+        </div>
+        <a href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果</a>
+      </article>`;
     }).join("")
     : "<p>未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>";
   return `<!DOCTYPE html>
@@ -143,7 +174,9 @@ function adminPage(rows) {
     h1 { font-size: 1.25rem; }
     .hint { color: #555; }
     ul { padding-left: 1.2rem; }
-    article { border-top: 1px solid #ddd; padding: .75rem 0; }
+    article { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid #ddd; padding: .75rem 0; }
+    article p { margin: .25rem 0 0; }
+    article a { flex-shrink: 0; }
     time { color: #666; font-size: .85rem; }
   </style>
 </head>
@@ -411,7 +444,7 @@ export default {
       try {
         const body = await request.json();
         const names = Array.isArray(body.names) ? body.names : [];
-        ctx.waitUntil(logQueries(env, names));
+        if (body.log !== false) ctx.waitUntil(logQueries(env, names));
         const index = await getIndex(ctx);
         return json(lookupNames(index, names));
       } catch (err) {

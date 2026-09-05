@@ -318,6 +318,7 @@ function shareParams() {
     s: search.get("s") || hash.get("s") || "",
     x: search.get("x") || hash.get("x") || "",
     n: search.get("n") || hash.get("n") || "",
+    skipLog: search.get("log") === "0" || hash.get("log") === "0",
   };
 }
 
@@ -1728,7 +1729,7 @@ async function runSearch() {
       const res = await fetch(apiUrl("api/lookup"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ names }),
+        body: JSON.stringify({ names, log: !shareParams().skipLog }),
       });
       if (!res.ok) throw new Error(res.statusText);
       applyLookupData(await res.json());
