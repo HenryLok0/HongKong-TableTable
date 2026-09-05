@@ -206,6 +206,8 @@ const FILTER_GROUP_ORDER = ["gender", "bucket", "extra", "badge", "age"];
 
 let snapshot = null;
 let playerByName = new Map();
+let sourceMeta = null;
+let edgeLookup = false;
 let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
 let lcsdDocCodes = new Map();
@@ -282,6 +284,41 @@ function dataUrl(file) {
   const script = document.querySelector("script[src*='app.js']")?.src;
   const fromScript = script ? new URL("../data/", script) : new URL("data/", pageBase());
   return new URL(file, fromScript).href;
+}
+
+function apiUrl(path) {
+  return new URL(path, pageBase()).href;
+}
+
+function applyMeta(meta) {
+  sourceMeta = meta;
+  lcsdDocCodes = new Map();
+  for (const [url, codes] of Object.entries(meta.lcsdDocCodes || {})) {
+    lcsdDocCodes.set(url, new Set(codes));
+  }
+  snapshot = {
+    players: snapshot?.players || [],
+    period: meta.period || snapshot?.period || "",
+    updated: meta.updated || snapshot?.updated || "",
+    totals: meta.totals || snapshot?.totals || {},
+    prior: {
+      period: meta.priorPeriod || snapshot?.prior?.period || "",
+      all: snapshot?.prior?.all || {},
+    },
+  };
+}
+
+function applyLookupData(data) {
+  if (data.totals) snapshot.totals = data.totals;
+  if (data.period) snapshot.period = data.period;
+  if (data.updated) snapshot.updated = data.updated;
+  if (data.prior) {
+    snapshot.prior = {
+      period: data.prior.period || snapshot.prior?.period || "",
+      all: { ...(snapshot.prior?.all || {}), ...(data.prior.all || {}) },
+    };
+  }
+  lastResults = data.results || [];
 }
 
 function shareParams() {
@@ -1476,6 +1513,7 @@ function dateOnly(value) {
 }
 
 function uniqueSourceNameCount() {
+  if (sourceMeta && Number.isFinite(sourceMeta.unique)) return sourceMeta.unique;
   const keys = new Set();
   for (const player of snapshot.players || []) {
     const key = normalizeName(player.name);
@@ -1506,14 +1544,15 @@ function periodLabel() {
 function renderDataMeta() {
   const meta = document.getElementById("data-meta");
   if (!meta) return;
-  const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
-  const badgeCount = Object.keys(badgeIndex.players || {}).length;
+  const hkttaCount = sourceMeta?.hktta ?? snapshot.players.length;
+  const lcsdCount = sourceMeta?.lcsd ?? Object.keys(lcsdIndex.players || {}).length;
+  const badgeCount = sourceMeta?.badges ?? Object.keys(badgeIndex.players || {}).length;
   const uniqueCount = uniqueSourceNameCount();
   const prior = snapshot.prior?.period
     ? `積分對照 ${formatPeriod(snapshot.prior.period)}`
     : "未有上期積分對照";
   meta.innerHTML = `
-    <div class="stat"><span>乒總</span><b>${snapshot.players.length}</b><span class="stat-sub">${escapeHtml(periodLabel())}</span><span class="stat-sub">${escapeHtml(prior)}</span></div>
+    <div class="stat"><span>乒總</span><b>${hkttaCount}</b><span class="stat-sub">${escapeHtml(periodLabel())}</span><span class="stat-sub">${escapeHtml(prior)}</span></div>
     <div class="stat"><span>康文署</span><b>${lcsdCount}</b><span class="stat-sub">PDF 姓名</span></div>
     <div class="stat"><span>恒生章別</span><b>${badgeCount}</b><span class="stat-sub">考試姓名</span></div>
     <div class="stat"><span>不重複</span><b>${uniqueCount}</b><span class="stat-sub">三個來源合計</span></div>
@@ -1641,6 +1680,24 @@ async function runSearch() {
     fillExportTable([]);
     syncShareUrl([]).catch(() => {});
     return;
+  }
+  if (edgeLookup) {
+    try {
+      const res = await fetch(apiUrl("api/lookup"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ names }),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      applyLookupData(await res.json());
+      setNamesEditorOpen(false);
+      renderResults();
+      syncShareUrl(names).catch(() => {});
+      return;
+    } catch (err) {
+      console.error(err);
+      edgeLookup = false;
+    }
   }
   lastResults = names.map((query) => {
     const matches = findMatches(query);
@@ -1806,18 +1863,22 @@ function bootSettings() {
   });
 }
 
-async function boot() {
-  bootSettings();
+async function detectEdgeLookup() {
+  if (/github\.io$/i.test(location.hostname)) return false;
+  try {
+    const res = await fetch(apiUrl("api/meta"), { headers: { Accept: "application/json" } });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !Number.isFinite(data.hktta)) return false;
+    applyMeta(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function bootLocal(shared) {
   const meta = document.getElementById("data-meta");
-  const shared = await readSharedNames();
-  if (shared.length) document.getElementById("names").value = shared.join("\n");
-
-  const extraFetch = Promise.all([
-    fetch(dataUrl("lcsd.json")),
-    fetch(dataUrl("lcsd_age_maps.json")),
-    fetch(dataUrl("badges.json")),
-  ]);
-
   try {
     const rankRes = await fetch(dataUrl("rankings.json"));
     if (!rankRes.ok) throw new Error(rankRes.statusText);
@@ -1828,14 +1889,16 @@ async function boot() {
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
     console.error(err);
-    return;
+    return false;
   }
-
   bindUi();
   if (shared.length) await runSearch();
-
   try {
-    const [lcsdRes, ageMapRes, badgeRes] = await extraFetch;
+    const [lcsdRes, ageMapRes, badgeRes] = await Promise.all([
+      fetch(dataUrl("lcsd.json")),
+      fetch(dataUrl("lcsd_age_maps.json")),
+      fetch(dataUrl("badges.json")),
+    ]);
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
@@ -1853,6 +1916,28 @@ async function boot() {
   } catch (err) {
     console.error(err);
   }
+  return true;
+}
+
+async function boot() {
+  bootSettings();
+  const shared = await readSharedNames();
+  if (shared.length) document.getElementById("names").value = shared.join("\n");
+  edgeLookup = await detectEdgeLookup();
+  if (edgeLookup) {
+    fetch(dataUrl("lcsd_age_maps.json"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) lcsdAgeMaps = data;
+        if (lastResults.length) renderResults();
+      })
+      .catch(() => {});
+    renderDataMeta();
+    bindUi();
+    if (shared.length) await runSearch();
+    return;
+  }
+  await bootLocal(shared);
 }
 
 function bindUi() {
