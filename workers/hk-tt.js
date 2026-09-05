@@ -1,6 +1,8 @@
 const GITHUB_BASE = "https://henrylok0.github.io/HongKong-TableTable/";
+const SITE_ORIGIN = "https://hktt.henrylok.me";
 const MAX_NAMES = 400;
 const SHORT_ID_LEN = 8;
+const INDEX_TTL_MS = 5 * 60 * 1000;
 // Bind KV as LINKS. Set Worker secret ADMIN_SECRET for /admin query logs.
 const QUERY_PREFIX = "q:";
 const QUERY_LOG_LIMIT = 300;
@@ -583,7 +585,7 @@ async function originJson(file, ctx) {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "cache-control": "public, max-age=1800",
+        "cache-control": "public, max-age=300",
       },
     });
     ctx.waitUntil(cache.put(cacheKey, cached));
@@ -673,13 +675,14 @@ async function buildIndex(ctx) {
 }
 
 function getIndex(ctx) {
-  if (!globalThis.__HKTT_INDEX) {
-    globalThis.__HKTT_INDEX = buildIndex(ctx).catch((err) => {
-      globalThis.__HKTT_INDEX = null;
-      throw err;
-    });
-  }
-  return globalThis.__HKTT_INDEX;
+  const slot = globalThis.__HKTT_INDEX;
+  if (slot?.promise && slot.exp > Date.now()) return slot.promise;
+  const promise = buildIndex(ctx).catch((err) => {
+    if (globalThis.__HKTT_INDEX?.promise === promise) globalThis.__HKTT_INDEX = null;
+    throw err;
+  });
+  globalThis.__HKTT_INDEX = { exp: Date.now() + INDEX_TTL_MS, promise };
+  return promise;
 }
 
 function findPossible(index, key) {
@@ -770,6 +773,34 @@ export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
     const path = incoming.pathname;
+
+    if (path === "/robots.txt") {
+      const body = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin",
+        `Sitemap: ${SITE_ORIGIN}/sitemap.xml`,
+        "",
+      ].join("\n");
+      return new Response(body, {
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" },
+      });
+    }
+
+    if (path === "/sitemap.xml") {
+      const body = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${SITE_ORIGIN}/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+`;
+      return new Response(body, {
+        headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" },
+      });
+    }
 
     if (path === "/api/short") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });

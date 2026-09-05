@@ -1315,6 +1315,15 @@ function renderCard(item, totals, orderLabel) {
   if (!item.matches.length) {
     const hasExtra = item.lcsd.length || (item.badges || []).length;
     const tone = hasExtra ? "lcsd" : "missing";
+    const possible = item.possible || [];
+    let miss = item.lcsd.length
+      ? "今期乒總公布榜未見精確姓名，但康文署分齡賽程／成績 PDF 有呢個名。"
+      : (item.badges || []).length
+        ? "今期乒總公布榜未見精確姓名，但恒生公開章別考試時間表有呢個名。"
+        : "今期乒總公布榜未見精確姓名。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。";
+    if (possible.length) {
+      miss += ` 下面列出 ${possible.length} 個包含呢幾個字嘅相近姓名，方便核對係咪打錯字。`;
+    }
     return `<article class="card ${tone}">
       <div class="card-top">
         <div>
@@ -1326,11 +1335,7 @@ function renderCard(item, totals, orderLabel) {
         </div>
         <div>${escapeHtml(orderLabel)}</div>
       </div>
-      <p>${item.lcsd.length
-        ? "今期乒總公布榜未見精確姓名，但康文署分齡賽程／成績 PDF 有呢個名。"
-        : (item.badges || []).length
-          ? "今期乒總公布榜未見精確姓名，但恒生公開章別考試時間表有呢個名。"
-          : "今期乒總公布榜未見精確姓名。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。"}</p>
+      <p>${miss}</p>
       ${lcsdHtml}
       ${badgeHtml}
       <div class="links">${renderLinks(item.query)}</div>
@@ -1389,7 +1394,13 @@ function renderPossibleCards(item) {
       </div>
     </article>`;
   }).join("");
-  return `<details class="possible-fold"><summary>可能係其他人（${possible.length}）</summary>${cards}</details>`;
+  const preview = possible.slice(0, 4).map((player) => escapeHtml(player.name)).join("、");
+  const extra = possible.length > 4 ? ` 等${possible.length}個` : "";
+  return `<details class="possible-fold" open>
+    <summary>相近姓名：${preview}${extra}</summary>
+    <p class="hint">乒總榜上有包含「${escapeHtml(item.query)}」嘅人，唔係完全相同，所以唔會計入上面名單統計。核對係咪打漏字或者用咗別名。</p>
+    ${cards}
+  </details>`;
 }
 
 function bestPoints(matches) {
@@ -1548,9 +1559,9 @@ function buildFilters(results) {
   box.innerHTML = `${clear}${chips}` || `<p class="hint">呢份名單暫時冇可篩選嘅組別。</p>`;
 }
 
-function formatUpdated(value) {
+function stampDate(value) {
   const text = String(value || "").trim();
-  return text ? `更新 ${text}` : "";
+  return text ? text.slice(0, 10) : "";
 }
 
 function latestUpdated(...values) {
@@ -1567,13 +1578,6 @@ function deltaHtml(current, prev) {
   if (!diff) return "";
   const up = diff > 0;
   return `<span class="stat-delta ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${Math.abs(diff)}</span>`;
-}
-
-function updatedLine(stamp, current, prev) {
-  const label = formatUpdated(stamp);
-  const delta = deltaHtml(current, prev);
-  if (!label && !delta) return "";
-  return `<span class="stat-sub">${label ? escapeHtml(label) : ""}${delta}</span>`;
 }
 
 function uniqueSourceNameCount() {
@@ -1613,19 +1617,20 @@ function renderDataMeta() {
   const hkttaAt = sourceMeta?.updated || snapshot.updated || "";
   const lcsdAt = sourceMeta?.lcsdUpdated || lcsdIndex.updated || "";
   const badgeAt = sourceMeta?.badgesUpdated || badgeIndex.updated || "";
-  const uniqueAt = latestUpdated(hkttaAt, lcsdAt, badgeAt);
   const hkttaPrev = sourceMeta?.hkttaPrev ?? snapshot.prevCount;
   const lcsdPrev = sourceMeta?.lcsdPrev ?? lcsdIndex.prevCount;
   const badgePrev = sourceMeta?.badgesPrev ?? badgeIndex.prevCount;
   const uniquePrev = sourceMeta?.uniquePrev ?? snapshot.uniquePrev;
-  const prior = snapshot.prior?.period
-    ? `積分對照 ${formatPeriod(snapshot.prior.period)}`
-    : "未有上期積分對照";
+  const period = periodLabel();
+  const stamp = stampDate(latestUpdated(hkttaAt, lcsdAt, badgeAt));
   meta.innerHTML = `
-    <div class="stat"><span>乒總</span><b>${hkttaCount}</b><span class="stat-sub">${escapeHtml(periodLabel())}</span><span class="stat-sub">${escapeHtml(prior)}</span>${updatedLine(hkttaAt, hkttaCount, hkttaPrev)}</div>
-    <div class="stat"><span>康文署</span><b>${lcsdCount}</b><span class="stat-sub">PDF 姓名</span>${updatedLine(lcsdAt, lcsdCount, lcsdPrev)}</div>
-    <div class="stat"><span>恒生章別</span><b>${badgeCount}</b><span class="stat-sub">考試姓名</span>${updatedLine(badgeAt, badgeCount, badgePrev)}</div>
-    <div class="stat"><span>不重複</span><b>${uniqueCount}</b><span class="stat-sub">三個來源合計</span>${updatedLine(uniqueAt, uniqueCount, uniquePrev)}</div>
+    <div class="data-meta-grid">
+      <div class="stat"><span>乒總</span><div class="stat-num"><b>${hkttaCount}</b>${deltaHtml(hkttaCount, hkttaPrev)}</div>${period ? `<span class="stat-sub">${escapeHtml(period)}</span>` : ""}</div>
+      <div class="stat"><span>康文署</span><div class="stat-num"><b>${lcsdCount}</b>${deltaHtml(lcsdCount, lcsdPrev)}</div></div>
+      <div class="stat"><span>恒生章別</span><div class="stat-num"><b>${badgeCount}</b>${deltaHtml(badgeCount, badgePrev)}</div></div>
+      <div class="stat"><span>不重複</span><div class="stat-num"><b>${uniqueCount}</b>${deltaHtml(uniqueCount, uniquePrev)}</div></div>
+    </div>
+    ${stamp ? `<p class="hint data-meta-updated">資料更新 ${escapeHtml(stamp)}</p>` : ""}
   `;
 }
 
@@ -1672,12 +1677,13 @@ function updateStats(results) {
   ];
   document.getElementById("age-list").innerHTML = ageRows.map((row) => `<li>${row}</li>`).join("");
 
+  const prior = snapshot.prior?.period ? `對照 ${formatPeriod(snapshot.prior.period)}` : "";
   document.getElementById("summary").classList.remove("hidden");
   document.getElementById("summary").innerHTML = `
     <div class="stat"><span>查詢人數</span><b>${results.length}</b></div>
     <div class="stat"><span>乒總上榜</span><b>${found.length}</b></div>
     <div class="stat"><span>男女比例</span><b>${genderText}</b></div>
-    <div class="stat"><span>資料期數</span><b>${escapeHtml(periodLabel())}</b></div>
+    <div class="stat"><span>資料期數</span><b>${escapeHtml(periodLabel())}</b>${prior ? `<span class="stat-sub">${escapeHtml(prior)}</span>` : ""}</div>
   `;
 }
 
@@ -2011,7 +2017,10 @@ async function bootLocal(shared) {
 async function boot() {
   bootSettings();
   const shared = await readSharedNames();
-  if (shared.length) document.getElementById("names").value = shared.join("\n");
+  if (shared.length) {
+    document.getElementById("names").value = shared.join("\n");
+    setNamesEditorOpen(false);
+  }
   edgeLookup = await detectEdgeLookup();
   if (edgeLookup) {
     fetch(dataUrl("lcsd_age_maps.json"))
