@@ -205,6 +205,7 @@ const FILTER_GROUP_LABELS = {
 const FILTER_GROUP_ORDER = ["gender", "bucket", "extra", "badge", "age"];
 
 let snapshot = null;
+let playerByName = new Map();
 let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
 let lcsdDocCodes = new Map();
@@ -758,20 +759,31 @@ function divisionLabel(id) {
   return BUCKETS.find((b) => b.id === id)?.label || "";
 }
 
-function findMatches(query, players) {
-  const key = normalizeName(query);
-  return players.filter((p) => normalizeName(p.name) === key);
+function indexPlayers() {
+  playerByName = new Map();
+  for (const player of snapshot.players || []) {
+    const key = player._nk || (player._nk = normalizeName(player.name));
+    const list = playerByName.get(key);
+    if (list) list.push(player);
+    else playerByName.set(key, [player]);
+  }
 }
 
-function findPossible(query, players) {
+function findMatches(query) {
+  return playerByName.get(normalizeName(query)) || [];
+}
+
+function findPossible(query) {
   const key = normalizeName(query);
   if (key.length < 2) return [];
-  return players
-    .filter((p) => {
-      const name = normalizeName(p.name);
-      return name !== key && name.includes(key);
-    })
-    .slice(0, 8);
+  const hits = [];
+  for (const player of snapshot.players || []) {
+    const name = player._nk || (player._nk = normalizeName(player.name));
+    if (name === key || !name.includes(key)) continue;
+    hits.push(player);
+    if (hits.length >= 8) break;
+  }
+  return hits;
 }
 
 function findLcsd(query) {
@@ -1631,11 +1643,11 @@ async function runSearch() {
     return;
   }
   lastResults = names.map((query) => {
-    const matches = findMatches(query, snapshot.players);
+    const matches = findMatches(query);
     return {
       query,
       matches,
-      possible: matches.length ? [] : findPossible(query, snapshot.players),
+      possible: matches.length ? [] : findPossible(query),
       lcsd: findLcsd(query),
       badges: findBadges(query),
     };
@@ -1797,21 +1809,21 @@ function bootSettings() {
 async function boot() {
   bootSettings();
   const meta = document.getElementById("data-meta");
+  const shared = await readSharedNames();
+  if (shared.length) document.getElementById("names").value = shared.join("\n");
+
+  const extraFetch = Promise.all([
+    fetch(dataUrl("lcsd.json")),
+    fetch(dataUrl("lcsd_age_maps.json")),
+    fetch(dataUrl("badges.json")),
+  ]);
+
   try {
-    const [rankRes, lcsdRes, ageMapRes, badgeRes] = await Promise.all([
-      fetch(dataUrl("rankings.json")),
-      fetch(dataUrl("lcsd.json")),
-      fetch(dataUrl("lcsd_age_maps.json")),
-      fetch(dataUrl("badges.json")),
-    ]);
+    const rankRes = await fetch(dataUrl("rankings.json"));
     if (!rankRes.ok) throw new Error(rankRes.statusText);
     snapshot = await rankRes.json();
+    indexPlayers();
     buildScoredRanks();
-    if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
-    if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
-    if (badgeRes.ok) badgeIndex = await badgeRes.json();
-    indexLcsdDocCodes();
-    buildNameStats();
     renderDataMeta();
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
@@ -1819,11 +1831,31 @@ async function boot() {
     return;
   }
 
-  const shared = await readSharedNames();
-  if (shared.length) {
-    document.getElementById("names").value = shared.join("\n");
-  }
+  bindUi();
+  if (shared.length) await runSearch();
 
+  try {
+    const [lcsdRes, ageMapRes, badgeRes] = await extraFetch;
+    if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
+    if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
+    if (badgeRes.ok) badgeIndex = await badgeRes.json();
+    indexLcsdDocCodes();
+    buildNameStats();
+    renderDataMeta();
+    if (lastResults.length) {
+      lastResults = lastResults.map((item) => ({
+        ...item,
+        lcsd: findLcsd(item.query),
+        badges: findBadges(item.query),
+      }));
+      renderResults();
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function bindUi() {
   document.getElementById("search-btn").addEventListener("click", runSearch);
   document.getElementById("edit-names-btn")?.addEventListener("click", () => setNamesEditorOpen(true, true));
   document.getElementById("share-btn")?.addEventListener("click", copyShareLink);
@@ -1856,7 +1888,6 @@ async function boot() {
     if (!btn) return;
     openHkttaSearch(btn.getAttribute("data-hktta"));
   });
-  await runSearch();
 }
 
 boot();
