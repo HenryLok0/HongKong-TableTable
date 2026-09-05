@@ -263,7 +263,20 @@ function resultHrefS(name) {
   return `/?${params}`;
 }
 
-function adminPage(rows) {
+async function countShortKeys(env) {
+  let n = 0;
+  let cursor;
+  do {
+    const page = await env.LINKS.list({ limit: 1000, cursor });
+    for (const key of page.keys) {
+      if (!key.name.startsWith(QUERY_PREFIX)) n += 1;
+    }
+    cursor = page.list_complete ? "" : page.cursor;
+  } while (cursor);
+  return n;
+}
+
+function adminPage(rows, shortCount) {
   const counts = new Map();
   for (const row of rows) {
     for (const name of row.names) counts.set(name, (counts.get(name) || 0) + 1);
@@ -274,20 +287,22 @@ function adminPage(rows) {
     : `<p class="empty">未有紀錄</p>`;
   const listHtml = rows.length
     ? rows.map((row) => {
-      const names = row.names.map((n) => escapeHtml(n)).join("、");
-      return `<article class="card">
+      const shown = row.names.slice(0, 8).map((n) => escapeHtml(n)).join("、");
+      const extra = row.names.length > 8 ? ` <span class="more">等${row.names.length}人</span>` : "";
+      const hay = escapeHtml(row.names.join(" "));
+      return `<article class="card" data-q="${hay}">
         <label class="pick"><input type="checkbox" value="${escapeHtml(row.key || "")}" /></label>
-        <div>
+        <div class="body">
           <time>${escapeHtml(formatHkt(row.at))}</time>
-          <p>${names}</p>
+          <p>${shown}${extra}</p>
         </div>
         <div class="actions">
           <a class="btn" href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果(${row.names.length}人)</a>
-          <button class="btn danger" type="button" data-del="${escapeHtml(row.key || "")}">剷除</button>
+          <button class="link danger" type="button" data-del="${escapeHtml(row.key || "")}">剷除呢次</button>
         </div>
       </article>`;
     }).join("")
-    : `<p class="empty">未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>`;
+    : `<p class="empty" id="empty-logs">未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。KV 入面嘅短英數係分享短碼，唔係呢份日誌。</p>`;
   return `<!DOCTYPE html>
 <html lang="zh-HK">
 <head>
@@ -322,25 +337,53 @@ function adminPage(rows) {
     .eyebrow { margin: 0 0 .4rem; letter-spacing: .14em; text-transform: uppercase; font-size: .75rem; color: var(--accent); font-weight: 700; }
     h1 { margin: 0; font-family: "Noto Serif TC", serif; font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--heading); }
     h2 { margin: 0; font-size: 1.05rem; color: var(--heading); }
-    .hint, .empty { color: var(--muted); }
-    .stat { display: inline-flex; gap: .75rem; align-items: center; margin: 1rem 0 0; padding: .45rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: .9rem; }
+    .hint, .empty, .more { color: var(--muted); }
+    .flash {
+      display: none; margin: 1rem 0 0; padding: .55rem .85rem;
+      background: var(--wash); border: 1px solid var(--line); border-radius: 10px; font-size: .9rem;
+    }
+    .flash.on { display: block; }
+    .stats { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0 0; }
+    .stat { padding: .45rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: .88rem; }
+    .stat b { font-weight: 700; }
     .panel { margin-top: 1.4rem; padding: 1rem 1.1rem 1.15rem; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
-    .head-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: .25rem; }
-    .pick { display: flex; padding-top: .2rem; }
+    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: .55rem; }
+    .tools { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; margin-bottom: .35rem; }
+    .tools input[type="search"] {
+      flex: 1; min-width: 10rem; padding: .4rem .7rem; border: 1px solid var(--line);
+      border-radius: 999px; background: var(--bg); color: var(--ink); font: inherit;
+    }
+    .pick { display: flex; align-items: center; gap: .35rem; }
     .pick input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
     .card { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid var(--line); padding: .9rem 0; }
     .card:first-of-type { border-top: 0; }
+    .card .body { flex: 1; min-width: 0; }
     .card p { margin: .3rem 0 0; }
     time { color: var(--muted); font-size: .82rem; }
-    .actions { display: flex; flex-direction: column; gap: .4rem; min-width: 7.2rem; }
+    .actions { display: flex; flex-direction: column; align-items: stretch; gap: .25rem; min-width: 7.2rem; }
     .btn {
       display: inline-flex; justify-content: center; align-items: center;
       padding: .4rem .7rem; border-radius: 999px; text-decoration: none; font: inherit; font-size: .85rem;
       background: var(--btn); color: #fff; border: 1px solid var(--btn); cursor: pointer; white-space: nowrap;
     }
     @media (prefers-color-scheme: dark) { .btn { color: #12161c; } }
-    .btn.danger { color: var(--miss); border-color: var(--miss); background: transparent; }
+    .btn.ghost { background: transparent; color: var(--btn); }
+    @media (prefers-color-scheme: dark) { .btn.ghost { color: var(--ink); } }
+    .btn.danger { color: #fff; border-color: var(--miss); background: var(--miss); }
+    @media (prefers-color-scheme: dark) { .btn.danger { color: #12161c; } }
+    .btn:disabled, .link:disabled { opacity: .4; cursor: not-allowed; }
+    .link {
+      display: inline-flex; justify-content: center; align-items: center;
+      padding: .15rem .2rem; border: 0; background: none; font: inherit; font-size: .8rem;
+      color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: .18em;
+    }
+    .link.danger { color: var(--miss); }
+    .link.armed, .btn.armed { box-shadow: 0 0 0 2px var(--wash), 0 0 0 4px var(--miss); }
+    .foot-danger {
+      display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between;
+      margin-top: .6rem; padding-top: .85rem; border-top: 1px dashed var(--line);
+    }
+    .busy { pointer-events: none; opacity: .55; }
     .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
     .chip {
       display: inline-flex; gap: .4rem; align-items: center;
@@ -348,75 +391,179 @@ function adminPage(rows) {
       border-radius: 999px; color: var(--ink); text-decoration: none; font-size: .9rem;
     }
     .chip span { color: var(--muted); font-size: .8rem; }
+    @media (max-width: 640px) {
+      .card { flex-wrap: wrap; }
+      .actions { flex-direction: row; min-width: 0; width: 100%; }
+    }
   </style>
 </head>
 <body>
   <main>
     <p class="eyebrow">Admin</p>
     <h1>查詢紀錄</h1>
-    <p class="hint">只有你睇到。主站冇呢頁連結。用家一查詢就會記入，唔使撳分享。呢頁要重新整理先見到新紀錄。</p>
-    <p class="stat">共 <b>${rows.length}</b> 次查詢 <button class="btn danger" type="button" id="reload-admin">重新整理</button></p>
-    <section class="panel">
+    <p class="hint">只有你睇到。主站冇呢頁連結。用家喺 hktt.henrylok.me 一查詢就會記入，唔使撳分享。Cloudflare KV 入面嘅短英數係分享短碼，同呢份日誌分開；剷除日誌唔會刪短碼。</p>
+    <p class="flash" id="flash"></p>
+    <div class="stats">
+      <span class="stat">日誌 <b>${rows.length}</b> 次</span>
+      <span class="stat">名單 <b>${counts.size}</b> 個名</span>
+      <span class="stat">短連結 <b>${shortCount}</b> 個</span>
+      <button class="btn ghost" type="button" id="restore-all"${shortCount ? "" : " disabled"}>由短連結還原日誌</button>
+      <button class="btn ghost" type="button" id="reload-admin">重新整理</button>
+    </div>
+    <section class="panel" id="log-panel">
       <div class="head-row">
         <h2>最近查詢</h2>
-        <div class="head-actions">
-          <label class="pick"><input type="checkbox" id="pick-all" /> 全選</label>
-          <button class="btn danger" type="button" id="del-picked">剷除已選</button>
-          <button class="btn danger" type="button" id="del-all">剷除全部</button>
-          <button class="btn" type="button" id="restore-all">恢復全部</button>
-        </div>
+      </div>
+      <div class="tools">
+        <label class="pick"><input type="checkbox" id="pick-all" /> 全選可見</label>
+        <input type="search" id="filter" placeholder="篩選姓名" autocomplete="off" />
+        <button class="btn danger" type="button" id="del-picked" disabled>剷除已選</button>
       </div>
       ${listHtml}
+      <div class="foot-danger">
+        <span class="hint">清空只刪呢頁日誌，KV 短連結會留低。</span>
+        <button class="link danger" type="button" id="del-all"${rows.length ? "" : " disabled"}>清空全部日誌</button>
+      </div>
     </section>
     <section class="panel">
       <h2>最常被查</h2>
+      <p class="hint">按出現次數。撳名會開主站結果，唔會再記入。</p>
       <div class="chips">${topHtml}</div>
     </section>
   </main>
   <script>
     const k = new URLSearchParams(location.search).get("k") || "";
-    async function send(body) {
-      const res = await fetch("/api/admin/queries", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...body, k }),
-      });
-      if (!res.ok) {
-        alert("剷除失敗");
+    if (k) history.replaceState({}, "", "/admin");
+    const flash = document.getElementById("flash");
+    const saved = sessionStorage.getItem("hktt_admin_flash");
+    if (saved && flash) {
+      sessionStorage.removeItem("hktt_admin_flash");
+      flash.textContent = saved;
+      flash.classList.add("on");
+    }
+    function selectedKeys() {
+      return [...document.querySelectorAll(".card:not([hidden]) .pick input:checked")].map((el) => el.value).filter(Boolean);
+    }
+    function syncPicked() {
+      const n = selectedKeys().length;
+      const btn = document.getElementById("del-picked");
+      if (!btn) return;
+      btn.disabled = !n;
+      btn.textContent = n ? "剷除已選 (" + n + ")" : "剷除已選";
+      btn.classList.remove("armed");
+      btn.dataset.armed = "";
+    }
+    function arm(btn, nextLabel, run) {
+      if (!btn || btn.disabled) return;
+      if (btn.dataset.armed === "1") {
+        btn.dataset.armed = "";
+        btn.classList.remove("armed");
+        run();
         return;
       }
-      location.reload();
+      document.querySelectorAll("[data-arm]").forEach((other) => {
+        if (other === btn) return;
+        other.dataset.armed = "";
+        other.classList.remove("armed");
+        if (other.dataset.label) other.textContent = other.dataset.label;
+        clearTimeout(other._arm);
+      });
+      btn.dataset.label = btn.textContent;
+      btn.dataset.armed = "1";
+      btn.classList.add("armed");
+      btn.textContent = nextLabel;
+      clearTimeout(btn._arm);
+      btn._arm = setTimeout(() => {
+        btn.dataset.armed = "";
+        btn.classList.remove("armed");
+        btn.textContent = btn.dataset.label || btn.textContent;
+        if (btn.id === "del-picked") syncPicked();
+      }, 4000);
+    }
+    async function send(body) {
+      const panel = document.getElementById("log-panel");
+      panel?.classList.add("busy");
+      try {
+        const res = await fetch("/api/admin/queries", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...body, k }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(data.error === "unauthorized" ? "未授權" : (data.error || "操作失敗"));
+          return;
+        }
+        const msg = data.restored != null
+          ? "由短連結還原咗 " + data.restored + " 次查詢。時間會記成而家。"
+          : "已剷除 " + (data.deleted || 0) + " 次查詢。短連結仍然喺 KV。";
+        sessionStorage.setItem("hktt_admin_flash", msg);
+        location.reload();
+      } catch {
+        alert("操作失敗");
+      } finally {
+        panel?.classList.remove("busy");
+      }
     }
     document.getElementById("reload-admin")?.addEventListener("click", () => location.reload());
+    document.getElementById("filter")?.addEventListener("input", (event) => {
+      const q = String(event.target.value || "").replace(/\\s+/g, "").toLowerCase();
+      let shown = 0;
+      document.querySelectorAll(".card").forEach((card) => {
+        const hit = !q || String(card.dataset.q || "").replace(/\\s+/g, "").toLowerCase().includes(q);
+        card.hidden = !hit;
+        if (!hit) {
+          const box = card.querySelector(".pick input");
+          if (box) box.checked = false;
+        }
+        if (hit) shown += 1;
+      });
+      const old = document.getElementById("empty-filter");
+      if (old) old.remove();
+      if (q && !shown) {
+        const p = document.createElement("p");
+        p.className = "empty";
+        p.id = "empty-filter";
+        p.textContent = "篩選冇結果";
+        document.getElementById("log-panel")?.querySelector(".foot-danger")?.before(p);
+      }
+      const pickAll = document.getElementById("pick-all");
+      if (pickAll) pickAll.checked = false;
+      syncPicked();
+    });
     document.getElementById("pick-all")?.addEventListener("change", (event) => {
       const on = event.target.checked;
-      document.querySelectorAll(".card .pick input").forEach((el) => { el.checked = on; });
+      document.querySelectorAll(".card:not([hidden]) .pick input").forEach((el) => { el.checked = on; });
+      syncPicked();
     });
-    document.getElementById("del-picked")?.addEventListener("click", () => {
-      const keys = [...document.querySelectorAll(".card .pick input:checked")].map((el) => el.value).filter(Boolean);
-      if (!keys.length) {
-        alert("未有剔選紀錄。");
-        return;
-      }
-      if (!confirm("剷除已選 " + keys.length + " 次查詢？")) return;
-      send({ keys });
+    document.querySelectorAll(".card .pick input").forEach((el) => {
+      el.addEventListener("change", syncPicked);
     });
-    document.getElementById("del-all")?.addEventListener("click", () => {
-      if (!confirm("剷除全部查詢紀錄？短連結唔會刪。")) return;
-      send({ all: true });
+    document.getElementById("del-picked")?.addEventListener("click", (event) => {
+      const keys = selectedKeys();
+      if (!keys.length) return;
+      arm(event.currentTarget, "再撳確認剷除 " + keys.length + " 次", () => send({ keys }));
     });
-    document.getElementById("restore-all")?.addEventListener("click", () => {
-      if (!confirm("由 KV 短連結還原查詢紀錄？已有相同名單唔會再加。短連結本身唔會刪。")) return;
-      send({ restore: true });
+    document.getElementById("del-all")?.addEventListener("click", (event) => {
+      arm(event.currentTarget, "再撳確認清空全部日誌", () => send({ all: true }));
+    });
+    document.getElementById("restore-all")?.addEventListener("click", (event) => {
+      arm(event.currentTarget, "再撳確認還原（時間記成而家）", () => send({ restore: true }));
     });
     document.querySelectorAll("[data-del]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (event) => {
         const key = btn.getAttribute("data-del");
-        if (!key || !confirm("剷除呢次查詢？")) return;
-        send({ key });
+        if (!key) return;
+        arm(event.currentTarget, "再撳確認剷除", () => send({ key }));
       });
     });
+    ["restore-all", "del-picked", "del-all"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.setAttribute("data-arm", "1");
+    });
+    document.querySelectorAll("[data-del]").forEach((el) => el.setAttribute("data-arm", "1"));
+    syncPicked();
   </script>
 </body>
 </html>`;
@@ -679,7 +826,7 @@ export default {
       if (!env.LINKS) {
         return new Response("LINKS kv missing", { status: 503 });
       }
-      const rows = await readQueryLogs(env);
+      const [rows, shortCount] = await Promise.all([readQueryLogs(env), countShortKeys(env)]);
       const headers = {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
@@ -688,7 +835,7 @@ export default {
       if (incoming.searchParams.get("k") === env.ADMIN_SECRET) {
         headers["Set-Cookie"] = adminCookie(env);
       }
-      return new Response(adminPage(rows), { headers });
+      return new Response(adminPage(rows, shortCount), { headers });
     }
 
     if (path === "/api/log") {
