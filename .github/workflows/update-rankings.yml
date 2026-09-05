@@ -31,6 +31,8 @@ jobs:
       - name: Fetch Hang Seng badge exams
         run: python scripts/fetch_badges.py
         continue-on-error: true
+      - name: Stamp unique name counts
+        run: python scripts/stamp_unique_counts.py
       - name: Commit snapshot if changed
         run: |
           git config user.name "github-actions[bot]"

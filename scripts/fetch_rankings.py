@@ -332,15 +332,27 @@ def main() -> None:
 
     players = merge_players(rows_by_list)
     prior = prior_pdf or resolve_prior(old, period)
+    count = len(players)
+    prev_count = None
+    if old:
+        prev_count = old.get("count")
+        if prev_count is None:
+            prev_count = len(old.get("players") or [])
     payload = {
         "source": "中國香港乒乓總會註冊球員電腦積分及排名榜（PDF）",
         "sourceUrl": "https://www.hktta.org.hk/registered_player/past_record/index.html",
         "period": period,
         "printed": printed,
         "updated": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
+        "count": count,
+        "prevCount": prev_count,
         "totals": totals,
         "players": players,
     }
+    if old and old.get("uniqueCount") is not None:
+        payload["uniqueCount"] = old["uniqueCount"]
+    if old and old.get("uniquePrev") is not None:
+        payload["uniquePrev"] = old["uniquePrev"]
     if prior:
         payload["prior"] = prior
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)

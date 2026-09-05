@@ -280,8 +280,12 @@ def main() -> None:
                 print(f"  results {len(mapped)}")
 
     players = merge_players(sittings, results)
+    prev_count = None
     if OUT_PATH.exists():
         old = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+        prev_count = old.get("count")
+        if prev_count is None:
+            prev_count = len(old.get("players") or {})
         kept = 0
         for name, recs in (old.get("players") or {}).items():
             existing = {(r.get("session"), r.get("code")) for r in players.get(name, [])}
@@ -297,6 +301,8 @@ def main() -> None:
         "source": "恒生乒乓球學院公開章別考試（考生時間表／成績 PDF）",
         "sourceUrl": LISTING,
         "updated": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
+        "count": len(players),
+        "prevCount": prev_count,
         "documents": parsed,
         "players": players,
     }

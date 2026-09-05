@@ -406,8 +406,12 @@ def main() -> None:
                     row["doubles"] = rec["doubles"]
                 players[rec["norm"]].append(row)
 
+    prev_count = None
     if OUT_PATH.exists():
         old = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+        prev_count = old.get("count")
+        if prev_count is None:
+            prev_count = len(old.get("players") or {})
         current_urls = {d["url"] for d in parsed_docs}
         kept = 0
         for doc in old.get("documents", []):
@@ -435,6 +439,8 @@ def main() -> None:
         "source": "康樂及文化事務署地區分齡乒乓球比賽（賽程表／成績 PDF）",
         "sourceUrl": PORTAL_URL,
         "updated": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
+        "count": len(players),
+        "prevCount": prev_count,
         "documents": parsed_docs,
         "players": players,
     }

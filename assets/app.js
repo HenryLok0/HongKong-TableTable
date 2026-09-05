@@ -1548,10 +1548,32 @@ function buildFilters(results) {
   box.innerHTML = `${clear}${chips}` || `<p class="hint">呢份名單暫時冇可篩選嘅組別。</p>`;
 }
 
-function dateOnly(value) {
+function formatUpdated(value) {
   const text = String(value || "").trim();
-  if (!text) return "";
-  return text.slice(0, 10);
+  return text ? `更新 ${text}` : "";
+}
+
+function latestUpdated(...values) {
+  const times = values.map((value) => String(value || "").trim()).filter(Boolean);
+  if (!times.length) return "";
+  return times.sort()[times.length - 1];
+}
+
+function deltaHtml(current, prev) {
+  const now = Number(current);
+  const was = Number(prev);
+  if (!Number.isFinite(now) || !Number.isFinite(was)) return "";
+  const diff = now - was;
+  if (!diff) return "";
+  const up = diff > 0;
+  return `<span class="stat-delta ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${Math.abs(diff)}</span>`;
+}
+
+function updatedLine(stamp, current, prev) {
+  const label = formatUpdated(stamp);
+  const delta = deltaHtml(current, prev);
+  if (!label && !delta) return "";
+  return `<span class="stat-sub">${label ? escapeHtml(label) : ""}${delta}</span>`;
 }
 
 function uniqueSourceNameCount() {
@@ -1578,9 +1600,7 @@ function formatPeriod(period) {
 }
 
 function periodLabel() {
-  const main = formatPeriod(snapshot.period || "");
-  const updated = dateOnly(snapshot.updated);
-  return updated ? `${main}（${updated}）` : main;
+  return formatPeriod(snapshot.period || "");
 }
 
 function renderDataMeta() {
@@ -1590,14 +1610,22 @@ function renderDataMeta() {
   const lcsdCount = sourceMeta?.lcsd ?? Object.keys(lcsdIndex.players || {}).length;
   const badgeCount = sourceMeta?.badges ?? Object.keys(badgeIndex.players || {}).length;
   const uniqueCount = uniqueSourceNameCount();
+  const hkttaAt = sourceMeta?.updated || snapshot.updated || "";
+  const lcsdAt = sourceMeta?.lcsdUpdated || lcsdIndex.updated || "";
+  const badgeAt = sourceMeta?.badgesUpdated || badgeIndex.updated || "";
+  const uniqueAt = latestUpdated(hkttaAt, lcsdAt, badgeAt);
+  const hkttaPrev = sourceMeta?.hkttaPrev ?? snapshot.prevCount;
+  const lcsdPrev = sourceMeta?.lcsdPrev ?? lcsdIndex.prevCount;
+  const badgePrev = sourceMeta?.badgesPrev ?? badgeIndex.prevCount;
+  const uniquePrev = sourceMeta?.uniquePrev ?? snapshot.uniquePrev;
   const prior = snapshot.prior?.period
     ? `積分對照 ${formatPeriod(snapshot.prior.period)}`
     : "未有上期積分對照";
   meta.innerHTML = `
-    <div class="stat"><span>乒總</span><b>${hkttaCount}</b><span class="stat-sub">${escapeHtml(periodLabel())}</span><span class="stat-sub">${escapeHtml(prior)}</span></div>
-    <div class="stat"><span>康文署</span><b>${lcsdCount}</b><span class="stat-sub">PDF 姓名</span></div>
-    <div class="stat"><span>恒生章別</span><b>${badgeCount}</b><span class="stat-sub">考試姓名</span></div>
-    <div class="stat"><span>不重複</span><b>${uniqueCount}</b><span class="stat-sub">三個來源合計</span></div>
+    <div class="stat"><span>乒總</span><b>${hkttaCount}</b><span class="stat-sub">${escapeHtml(periodLabel())}</span><span class="stat-sub">${escapeHtml(prior)}</span>${updatedLine(hkttaAt, hkttaCount, hkttaPrev)}</div>
+    <div class="stat"><span>康文署</span><b>${lcsdCount}</b><span class="stat-sub">PDF 姓名</span>${updatedLine(lcsdAt, lcsdCount, lcsdPrev)}</div>
+    <div class="stat"><span>恒生章別</span><b>${badgeCount}</b><span class="stat-sub">考試姓名</span>${updatedLine(badgeAt, badgeCount, badgePrev)}</div>
+    <div class="stat"><span>不重複</span><b>${uniqueCount}</b><span class="stat-sub">三個來源合計</span>${updatedLine(uniqueAt, uniqueCount, uniquePrev)}</div>
   `;
 }
 

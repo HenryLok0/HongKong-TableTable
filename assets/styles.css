@@ -185,6 +185,19 @@ footer {
   overflow-wrap: anywhere;
 }
 
+.data-meta .stat-delta {
+  margin-left: 0.35em;
+  font-weight: 700;
+}
+
+.data-meta .stat-delta.up {
+  color: var(--ok);
+}
+
+.data-meta .stat-delta.down {
+  color: var(--miss);
+}
+
 .data-meta .stat b {
   font-size: 24px;
 }
