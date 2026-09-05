@@ -139,6 +139,105 @@ async function deleteAllQueryLogs(env) {
   return deleted;
 }
 
+function fromBase64Url(text) {
+  const pad = "=".repeat((4 - (text.length % 4)) % 4);
+  const bin = atob(String(text).replace(/-/g, "+").replace(/_/g, "/") + pad);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function parseNameList(text) {
+  const seen = new Set();
+  const names = [];
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const item = line.trim();
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
+    names.push(item);
+  }
+  return names;
+}
+
+function bytesToNames(bytes) {
+  let text = "";
+  for (let i = 0; i + 1 < bytes.length; i += 2) {
+    text += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
+  }
+  return parseNameList(text);
+}
+
+function alphabetUnpack(bytes) {
+  if (!bytes.length) return [];
+  const count = bytes[0];
+  let offset = 1;
+  const alphabet = [];
+  for (let i = 0; i < count; i += 1) {
+    if (offset + 1 >= bytes.length) return [];
+    alphabet.push(String.fromCharCode((bytes[offset] << 8) | bytes[offset + 1]));
+    offset += 2;
+  }
+  const names = [];
+  let current = "";
+  for (; offset < bytes.length; offset += 1) {
+    const value = bytes[offset];
+    if (value === 255) {
+      names.push(current);
+      current = "";
+      continue;
+    }
+    current += alphabet[value] || "";
+  }
+  if (current) names.push(current);
+  return parseNameList(names.join("\n"));
+}
+
+async function inflateRaw(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function decodeSharePayload(token) {
+  if (!token) return [];
+  try {
+    const kind = token[0];
+    const bytes = fromBase64Url(token.slice(1));
+    if (kind === "3") return alphabetUnpack(bytes);
+    if (kind === "4") return alphabetUnpack(await inflateRaw(bytes));
+    const raw = kind === "2" ? await inflateRaw(bytes) : bytes;
+    return bytesToNames(raw);
+  } catch {
+    return [];
+  }
+}
+
+function namesSig(names) {
+  return names.join("\n");
+}
+
+async function restoreQueryLogsFromShorts(env) {
+  const existing = await readQueryLogs(env);
+  const have = new Set(existing.map((row) => namesSig(row.names)));
+  let restored = 0;
+  let cursor;
+  do {
+    const page = await env.LINKS.list({ limit: 100, cursor });
+    for (const key of page.keys) {
+      if (key.name.startsWith(QUERY_PREFIX)) continue;
+      const token = await env.LINKS.get(key.name);
+      if (!token) continue;
+      const names = await decodeSharePayload(token);
+      const sig = namesSig(names);
+      if (!sig || have.has(sig)) continue;
+      have.add(sig);
+      await logQueries(env, names);
+      restored += 1;
+    }
+    cursor = page.list_complete ? "" : page.cursor;
+  } while (cursor);
+  return restored;
+}
+
 function namesToBytes(names) {
   const text = names.join("\n");
   const bytes = new Uint8Array(text.length * 2);
@@ -264,6 +363,7 @@ function adminPage(rows) {
           <label class="pick"><input type="checkbox" id="pick-all" /> 全選</label>
           <button class="btn danger" type="button" id="del-picked">剷除已選</button>
           <button class="btn danger" type="button" id="del-all">剷除全部</button>
+          <button class="btn" type="button" id="restore-all">恢復全部</button>
         </div>
       </div>
       ${listHtml}
@@ -305,6 +405,10 @@ function adminPage(rows) {
     document.getElementById("del-all")?.addEventListener("click", () => {
       if (!confirm("剷除全部查詢紀錄？短連結唔會刪。")) return;
       send({ all: true });
+    });
+    document.getElementById("restore-all")?.addEventListener("click", () => {
+      if (!confirm("由 KV 短連結還原查詢紀錄？已有相同名單唔會再加。短連結本身唔會刪。")) return;
+      send({ restore: true });
     });
     document.querySelectorAll("[data-del]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -550,6 +654,10 @@ export default {
         if (body.all) {
           const deleted = await deleteAllQueryLogs(env);
           return json({ ok: true, deleted });
+        }
+        if (body.restore) {
+          const restored = await restoreQueryLogsFromShorts(env);
+          return json({ ok: true, restored });
         }
         const keys = Array.isArray(body.keys) ? body.keys : body.key ? [body.key] : [];
         const valid = keys.map((key) => String(key || "")).filter((key) => key.startsWith(QUERY_PREFIX));
