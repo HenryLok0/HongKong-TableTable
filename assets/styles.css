@@ -218,6 +218,20 @@ textarea {
   margin-top: 12px;
 }
 
+.names-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.names-compact-text {
+  margin: 0;
+  font-weight: 700;
+  color: var(--heading);
+}
+
 button {
   appearance: none;
   border: 0;
@@ -358,6 +372,21 @@ button.ghost {
 
 .hint-fold .hint {
   margin-top: 8px;
+}
+
+.possible-fold {
+  margin: 8px 0 0;
+}
+
+.possible-fold summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+.possible-fold .card {
+  margin-top: 10px;
 }
 
 .filter-panel {

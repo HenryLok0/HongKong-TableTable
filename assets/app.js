@@ -1219,7 +1219,7 @@ function renderPossibleCards(item) {
       </div>
     </article>`;
   }).join("");
-  return `<p class="hint">以下 ${possible.length} 個相似姓名可能係其他人：</p>${cards}`;
+  return `<details class="possible-fold"><summary>可能係其他人（${possible.length}）</summary>${cards}</details>`;
 }
 
 function bestPoints(matches) {
@@ -1505,8 +1505,8 @@ function renderResults() {
   document.getElementById("results").innerHTML = sorted
     .map(({ item, listIndex }) => {
       const label = mode === "list"
-        ? `球員名單第 ${listIndex + 1}`
-        : `名單內排名 ${strengthMap.get(item.query)}`;
+        ? `貼上第 ${listIndex + 1}`
+        : `實力梯級第 ${strengthMap.get(item.query)}`;
       return renderCard(item, snapshot.totals, label);
     })
     .join("") || `<p class="hint">呢組篩選冇符合嘅球員。</p>`;
@@ -1527,10 +1527,23 @@ function openHkttaSearch(name) {
   document.getElementById("hktta-search").submit();
 }
 
+function setNamesEditorOpen(open, focus = false) {
+  const editor = document.getElementById("names-editor");
+  const compact = document.getElementById("names-compact");
+  const searchBtn = document.getElementById("search-btn");
+  const names = parseNames(document.getElementById("names").value);
+  editor.classList.toggle("hidden", !open);
+  compact.classList.toggle("hidden", open);
+  searchBtn.classList.toggle("hidden", !open);
+  document.getElementById("names-count").textContent = String(names.length);
+  if (open && focus) document.getElementById("names").focus();
+}
+
 async function runSearch() {
   const names = parseNames(document.getElementById("names").value);
   if (!names.length) {
     lastResults = [];
+    setNamesEditorOpen(true);
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");
     document.getElementById("results").innerHTML = "";
@@ -1548,6 +1561,7 @@ async function runSearch() {
       badges: findBadges(query),
     };
   });
+  setNamesEditorOpen(false);
   renderResults();
   syncShareUrl(names).catch(() => {});
 }
@@ -1732,6 +1746,7 @@ async function boot() {
   }
 
   document.getElementById("search-btn").addEventListener("click", runSearch);
+  document.getElementById("edit-names-btn")?.addEventListener("click", () => setNamesEditorOpen(true, true));
   document.getElementById("share-btn")?.addEventListener("click", copyShareLink);
   document.getElementById("copy-table-btn")?.addEventListener("click", copyResultsTable);
   document.getElementById("print-btn")?.addEventListener("click", printResultsTable);
@@ -1742,6 +1757,7 @@ async function boot() {
     setExportStatus("");
     fillExportTable([]);
     syncShareUrl([]);
+    setNamesEditorOpen(true, true);
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");
     document.getElementById("results").innerHTML = "";

@@ -29,7 +29,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="assets/styles.css?v=20260905s" />
+  <link rel="stylesheet" href="assets/styles.css?v=20260905t" />
 </head>
 
 <body>
@@ -63,8 +63,14 @@
 
   <main>
     <section class="panel">
-      <label for="names">球員名單</label>
-      <textarea id="names" rows="8" placeholder="每行一個中文全名"></textarea>
+      <div id="names-compact" class="names-compact hidden">
+        <p class="names-compact-text">已貼 <b id="names-count">0</b> 個名</p>
+        <button type="button" id="edit-names-btn" class="ghost">改名單</button>
+      </div>
+      <div id="names-editor">
+        <label for="names">球員名單</label>
+        <textarea id="names" rows="8" placeholder="每行一個中文全名"></textarea>
+      </div>
       <div class="actions">
         <button id="search-btn" type="button">查詢名單</button>
         <button id="share-btn" type="button" class="ghost">分享名單</button>
@@ -102,8 +108,8 @@
       <div class="toolbar">
         <div class="toolbar-row">
           <span class="toolbar-label">排序</span>
-          <label class="choice"><input type="radio" name="sort-mode" value="list" /> 按照球員名單排名</label>
-          <label class="choice"><input type="radio" name="sort-mode" value="rank" checked /> 名單內排名</label>
+          <label class="choice"><input type="radio" name="sort-mode" value="list" /> 跟貼上次序</label>
+          <label class="choice"><input type="radio" name="sort-mode" value="rank" checked /> 跟實力梯級</label>
         </div>
         <div class="toolbar-row">
           <span class="toolbar-label">匯出</span>
@@ -111,7 +117,7 @@
           <button id="print-btn" type="button" class="ghost">列印</button>
           <span id="export-status" class="hint" aria-live="polite"></span>
         </div>
-        <p class="hint">名單內排名：乒總官方名次 → 考獲章別 → 報考章別 → 康文署 → 冇紀錄。唔會改卡片上嘅全港排名。</p>
+        <p class="hint">實力梯級：乒總官方名次 → 考獲章別 → 報考章別 → 康文署 → 冇紀錄。唔會改卡片上嘅全港排名。</p>
         <div class="toolbar-row toolbar-filters">
           <span class="toolbar-label">篩選</span>
           <div class="filter-panel">
@@ -147,7 +153,7 @@
     <input type="hidden" name="error" value="" />
   </form>
 
-  <script src="assets/app.js?v=20260905q"></script>
+  <script src="assets/app.js?v=20260905t"></script>
 </body>
 
 </html>
