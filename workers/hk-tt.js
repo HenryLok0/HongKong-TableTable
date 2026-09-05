@@ -158,7 +158,7 @@ function adminPage(rows) {
           <time>${escapeHtml(formatHkt(row.at))}</time>
           <p>${names}</p>
         </div>
-        <a href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果</a>
+        <a href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果(${row.names.length}人)</a>
       </article>`;
     }).join("")
     : "<p>未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>";
