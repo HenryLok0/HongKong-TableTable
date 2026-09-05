@@ -60,7 +60,7 @@ function json(data, init = {}) {
   });
 }
 
-async function logQueries(env, names) {
+async function logQueries(env, names, request) {
   if (!env.LINKS) return;
   const clean = [];
   const seen = new Set();
@@ -73,11 +73,106 @@ async function logQueries(env, names) {
   }
   if (!clean.length) return;
   const id = `${QUERY_PREFIX}${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+  const row = { at: Date.now(), names: clean, ...clientMeta(request) };
   try {
-    await env.LINKS.put(id, JSON.stringify({ at: Date.now(), names: clean }));
+    await env.LINKS.put(id, JSON.stringify(row));
   } catch {
     // Daily KV write quota; skip this log.
   }
+}
+
+function clientMeta(request) {
+  if (!request) return {};
+  const forwarded = (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim();
+  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("True-Client-IP") || forwarded;
+  const ua = request.headers.get("User-Agent") || "";
+  const cf = request.cf || {};
+  const lang = (request.headers.get("Accept-Language") || "").split(",")[0].trim().slice(0, 16);
+  const out = {};
+  if (ip) out.ip = ip;
+  const device = deviceLabel(ua);
+  if (device) out.device = device;
+  const browser = browserLabel(ua);
+  if (browser) out.browser = browser;
+  if (cf.country) out.country = String(cf.country);
+  if (cf.city) out.city = String(cf.city).slice(0, 40);
+  if (cf.region) out.region = String(cf.region).slice(0, 40);
+  if (cf.asOrganization) out.org = String(cf.asOrganization).slice(0, 48);
+  if (cf.asn) out.asn = String(cf.asn);
+  if (cf.timezone) out.tz = String(cf.timezone).slice(0, 40);
+  if (cf.httpProtocol) out.proto = String(cf.httpProtocol);
+  if (lang) out.lang = lang;
+  const ref = refererHost(request);
+  if (ref) out.ref = ref;
+  return out;
+}
+
+function browserLabel(ua) {
+  const text = String(ua || "");
+  if (!text) return "";
+  if (/Edg\//i.test(text)) return "Edge";
+  if (/OPR\/|Opera/i.test(text)) return "Opera";
+  if (/SamsungBrowser/i.test(text)) return "Samsung";
+  if (/Firefox\//i.test(text)) return "Firefox";
+  if (/CriOS|Chrome\//i.test(text) && !/Edg\//i.test(text)) return "Chrome";
+  if (/Safari\//i.test(text) && !/Chrome|CriOS|Android/i.test(text)) return "Safari";
+  return "";
+}
+
+function refererHost(request) {
+  const raw = request.headers.get("Referer") || "";
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (host === "hktt.henrylok.me" || host.endsWith(".henrylok.me") || host.endsWith("github.io")) return "";
+    return (host + url.pathname).slice(0, 80);
+  } catch {
+    return "";
+  }
+}
+
+function countryLabel(code) {
+  const map = {
+    HK: "香港", MO: "澳門", TW: "台灣", CN: "中國", JP: "日本", KR: "韓國",
+    SG: "新加坡", MY: "馬來西亞", US: "美國", GB: "英國", AU: "澳洲", CA: "加拿大",
+  };
+  const key = String(code || "").toUpperCase();
+  return map[key] || key;
+}
+
+function formatVisitor(row) {
+  const place = [row.city, row.region, countryLabel(row.country)].filter(Boolean);
+  const uniq = [...new Set(place)];
+  const net = [row.asn ? "AS" + row.asn : "", row.org].filter(Boolean).join(" ");
+  return [
+    row.device,
+    row.browser,
+    uniq.join(" "),
+    row.ip,
+    net,
+    row.lang,
+    row.tz,
+    row.proto,
+    row.ref ? "來源 " + row.ref : "",
+  ].map((bit) => String(bit || "").trim()).filter(Boolean).join(" · ");
+}
+
+function formatLogWhen(row) {
+  return formatHkt(row.at);
+}
+
+function deviceLabel(ua) {
+  const text = String(ua || "");
+  if (!text) return "";
+  if (/bot|crawler|spider|slurp/i.test(text)) return "Bot";
+  if (/iPad/i.test(text) || (/Macintosh/i.test(text) && /Mobile/i.test(text))) return "iPad";
+  if (/iPhone|iPod/i.test(text)) return "iPhone";
+  if (/Android/i.test(text)) return /Mobile/i.test(text) ? "Android" : "Android平板";
+  if (/Windows/i.test(text)) return "Windows";
+  if (/Mac OS X|Macintosh/i.test(text)) return "Mac";
+  if (/Linux/i.test(text)) return "Linux";
+  return "其他";
 }
 
 function adminOk(request, env, extraK) {
@@ -291,11 +386,13 @@ function adminPage(rows, shortCount) {
     ? rows.map((row) => {
       const shown = row.names.slice(0, 8).map((n) => escapeHtml(n)).join("、");
       const extra = row.names.length > 8 ? ` <span class="more">等${row.names.length}人</span>` : "";
-      const hay = escapeHtml(row.names.join(" "));
+      const visitor = formatVisitor(row);
+      const hay = escapeHtml([row.names.join(" "), visitor, row.ip, row.device, row.country].filter(Boolean).join(" "));
       return `<article class="card" data-q="${hay}">
         <label class="pick"><input type="checkbox" value="${escapeHtml(row.key || "")}" /></label>
         <div class="body">
-          <time>${escapeHtml(formatHkt(row.at))}</time>
+          <time>${escapeHtml(formatLogWhen(row))}</time>
+          ${visitor ? `<p class="who">${escapeHtml(visitor)}</p>` : ""}
           <p>${shown}${extra}</p>
         </div>
         <div class="actions">
@@ -361,6 +458,7 @@ function adminPage(rows, shortCount) {
     .card:first-of-type { border-top: 0; }
     .card .body { flex: 1; min-width: 0; }
     .card p { margin: .3rem 0 0; }
+    .who { color: var(--muted); font-size: .8rem; line-height: 1.4; }
     time { color: var(--muted); font-size: .82rem; }
     .actions { display: flex; flex-direction: column; align-items: stretch; gap: .25rem; min-width: 7.2rem; }
     .btn {
@@ -418,7 +516,7 @@ function adminPage(rows, shortCount) {
       </div>
       <div class="tools">
         <label class="pick"><input type="checkbox" id="pick-all" /> 全選可見</label>
-        <input type="search" id="filter" placeholder="篩選姓名" autocomplete="off" />
+        <input type="search" id="filter" placeholder="篩選姓名／IP／裝置" autocomplete="off" />
         <button class="btn danger" type="button" id="del-picked" disabled>剷除已選</button>
       </div>
       ${listHtml}
@@ -886,7 +984,7 @@ export default {
       if (request.method !== "POST") return new Response("POST only", { status: 405 });
       try {
         const body = await request.json();
-        await logQueries(env, Array.isArray(body.names) ? body.names : []);
+        await logQueries(env, Array.isArray(body.names) ? body.names : [], request);
         return json({ ok: true });
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
