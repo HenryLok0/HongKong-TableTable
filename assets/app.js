@@ -172,6 +172,9 @@ const FILTERS = [
   { group: "bucket", id: "lcsd-only", label: "只有康文署比賽" },
   { group: "extra", id: "has-lcsd", label: "有康文署紀錄" },
   { group: "extra", id: "has-badge", label: "有恒生章別紀錄" },
+  { group: "extra", id: "has-coach", label: "教練" },
+  { group: "extra", id: "has-club", label: "球會" },
+  { group: "extra", id: "has-school", label: "學校" },
   { group: "bucket", id: "none", label: "完全沒有任何紀錄" },
   ...BADGE_FILTERS.map((b) => ({ group: "badge", id: b.id, label: b.label })),
   ...AGE_BANDS.map((b) => ({ group: "age", id: b.id, label: b.label })),
@@ -180,7 +183,7 @@ const FILTERS = [
 const FILTER_GROUP_LABELS = {
   gender: "性別",
   bucket: "組別",
-  extra: "紀錄",
+  extra: "其他",
   badge: "章別",
   age: "年齡",
 };
@@ -1187,6 +1190,19 @@ function selectedFilters(group) {
   return [...document.querySelectorAll(`#filter-box input[data-group="${group}"]:checked`)].map((el) => el.value);
 }
 
+function hasHkttaField(item, key) {
+  return (item.matches || []).some((p) => String(p[key] || "").trim());
+}
+
+function extraHas(item, id) {
+  if (id === "has-lcsd") return Boolean(item.lcsd.length);
+  if (id === "has-badge") return Boolean((item.badges || []).length);
+  if (id === "has-coach") return hasHkttaField(item, "coach");
+  if (id === "has-club") return hasHkttaField(item, "club");
+  if (id === "has-school") return hasHkttaField(item, "school");
+  return false;
+}
+
 function sortMode() {
   return document.querySelector("input[name='sort-mode']:checked")?.value || "list";
 }
@@ -1202,8 +1218,7 @@ function passesFilter(item) {
   if (buckets.length && !buckets.includes(classify(item))) return false;
   if (ages.length && !ages.includes(ageBand(item))) return false;
   if (badges.length && !badges.includes(itemBadgeId(item))) return false;
-  if (extras.includes("has-lcsd") && !item.lcsd.length) return false;
-  if (extras.includes("has-badge") && !(item.badges || []).length) return false;
+  if (extras.some((id) => !extraHas(item, id))) return false;
   return true;
 }
 
@@ -1220,11 +1235,8 @@ function filterHasPeople(filter, results) {
   if (filter.group === "badge") {
     return results.some((item) => itemBadgeId(item) === filter.id);
   }
-  if (filter.id === "has-lcsd") {
-    return results.some((item) => item.lcsd.length);
-  }
-  if (filter.id === "has-badge") {
-    return results.some((item) => (item.badges || []).length);
+  if (filter.group === "extra") {
+    return results.some((item) => extraHas(item, filter.id));
   }
   return true;
 }
@@ -1235,8 +1247,7 @@ function filterPeopleCount(filter, results) {
     if (filter.group === "bucket") return classify(item) === filter.id;
     if (filter.group === "age") return ageBand(item) === filter.id;
     if (filter.group === "badge") return itemBadgeId(item) === filter.id;
-    if (filter.id === "has-lcsd") return Boolean(item.lcsd.length);
-    if (filter.id === "has-badge") return Boolean((item.badges || []).length);
+    if (filter.group === "extra") return extraHas(item, filter.id);
     return false;
   }).length;
 }
