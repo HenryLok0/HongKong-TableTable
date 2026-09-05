@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>香港乒乓球排名查詢</title>
   <meta name="description" content="貼上球員名單，對照乒總電腦積分及排名、康文署分齡紀錄同恒生公開章別考試。" />
   <link rel="canonical" href="https://henrylok0.github.io/HongKong-TableTable/" />
@@ -29,7 +29,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="assets/styles.css?v=20260905n" />
+  <link rel="stylesheet" href="assets/styles.css?v=20260905s" />
 </head>
 
 <body>
@@ -64,7 +64,7 @@
   <main>
     <section class="panel">
       <label for="names">球員名單</label>
-      <textarea id="names" rows="16" placeholder="&#10;"></textarea>
+      <textarea id="names" rows="8" placeholder="每行一個中文全名"></textarea>
       <div class="actions">
         <button id="search-btn" type="button">查詢名單</button>
         <button id="share-btn" type="button" class="ghost">分享名單</button>
@@ -89,13 +89,16 @@
           <ul id="age-list" class="bucket-list"></ul>
         </div>
       </div>
-      <p class="hint">
-        甲至戊組按今期乒總全港排名，對照
-        <a href="https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryForm/2026RankingProspectus.pdf"
-          target="_blank" rel="noreferrer">2026 全港公開排名錦標賽章程</a>
-        。女子冇戊組，第 301 名或以後算丁組。年齡跟該區該年章程／賽程抽出嚟嘅「代號→歲數」表，再用「今年 − 比賽年」加歲。抽唔到先用該份 PDF
-        嘅代號形態估計。有單打用單打，冇單打先用雙打；混合不限唔用來估歲。推唔到嘅唔會計入。冇人嘅組別唔會顯示。
-      </p>
+      <details class="hint-fold">
+        <summary>點計組別同年齡</summary>
+        <p class="hint">
+          甲至戊組按今期乒總全港排名，對照
+          <a href="https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryForm/2026RankingProspectus.pdf"
+            target="_blank" rel="noreferrer">2026 全港公開排名錦標賽章程</a>
+          。女子冇戊組，第 301 名或以後算丁組。年齡跟該區該年章程／賽程抽出嚟嘅「代號→歲數」表，再用「今年 − 比賽年」加歲。抽唔到先用該份 PDF
+          嘅代號形態估計。有單打用單打，冇單打先用雙打；混合不限唔用來估歲。推唔到嘅唔會計入。冇人嘅組別唔會顯示。
+        </p>
+      </details>
       <div class="toolbar">
         <div class="toolbar-row">
           <span class="toolbar-label">排序</span>
