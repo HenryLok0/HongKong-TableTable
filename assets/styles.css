@@ -598,7 +598,7 @@ button.ghost {
   margin-top: 12px;
 }
 
-.grid div span {
+.grid > div > span {
   display: block;
   color: var(--muted);
   font-size: 12px;

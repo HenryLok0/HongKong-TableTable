@@ -595,12 +595,8 @@ function changeCell(player) {
     ptsPrev = `<span class="muted">上期 ${prior.points}</span>`;
   }
   if (!rankMove && !ptsMove) return "";
-  const line1 = rankMove && ptsMove
-    ? `${rankMove} <span class="muted">(</span>${ptsMove}<span class="muted">)</span>`
-    : rankMove || ptsMove;
-  const line2 = rankPrev && ptsPrev
-    ? `${rankPrev} <span class="muted">(</span>${ptsPrev}<span class="muted">)</span>`
-    : rankPrev || ptsPrev;
+  const line1 = rankMove && ptsMove ? `${rankMove} (${ptsMove})` : rankMove || ptsMove;
+  const line2 = rankPrev && ptsPrev ? `${rankPrev} (${ptsPrev})` : rankPrev || ptsPrev;
   return `<div><span>上期升跌</span><b>${line1}${line2 ? `<br>${line2}` : ""}</b></div>`;
 }
 
