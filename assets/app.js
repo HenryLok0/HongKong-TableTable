@@ -192,6 +192,7 @@ let badgeIndex = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
+let nameStats = { gender: new Map(), age: new Map() };
 
 function loadSettings() {
   try {
@@ -423,18 +424,96 @@ async function copyShareLink() {
   }
 }
 
-function estimateGenderFromName(name) {
+function givenNameChars(name) {
   const chars = Array.from(normalizeName(name));
-  if (chars.length < 2) return "";
-  const given = chars.slice(1);
+  if (chars.length < 2) return [];
+  return chars.slice(1);
+}
+
+function bumpGenderStat(ch, gender) {
+  const row = nameStats.gender.get(ch) || { M: 0, F: 0 };
+  row[gender] += 1;
+  nameStats.gender.set(ch, row);
+}
+
+function bumpAgeStat(ch, band) {
+  const row = nameStats.age.get(ch) || new Map();
+  row.set(band, (row.get(band) || 0) + 1);
+  nameStats.age.set(ch, row);
+}
+
+function buildNameStats() {
+  nameStats = { gender: new Map(), age: new Map() };
+  for (const player of snapshot.players || []) {
+    const given = givenNameChars(player.name);
+    if ((player.gender === "M" || player.gender === "F")) {
+      given.forEach((ch) => bumpGenderStat(ch, player.gender));
+    }
+    const band = HKTTA_AGE[player.age?.youngestGroup] || "";
+    if (band) given.forEach((ch) => bumpAgeStat(ch, band));
+  }
+  for (const [name, recs] of Object.entries(lcsdIndex.players || {})) {
+    const item = { query: name, matches: [], lcsd: recs };
+    const given = givenNameChars(name);
+    const gender = recordedGender(item);
+    if (gender) given.forEach((ch) => bumpGenderStat(ch, gender));
+    const band = lcsdAgeFromItem(item).band;
+    if (band) given.forEach((ch) => bumpAgeStat(ch, band));
+  }
+}
+
+function estimateGenderFromName(name) {
+  const given = givenNameChars(name);
+  if (!given.length) return "";
+  let male = 0;
+  let female = 0;
+  given.forEach((ch, i) => {
+    const weight = i === given.length - 1 ? 2 : 1;
+    const row = nameStats.gender.get(ch);
+    if (!row) return;
+    male += weight * row.M;
+    female += weight * row.F;
+  });
+  const total = male + female;
+  if (total >= 8) {
+    if (male / total >= 0.62) return "M";
+    if (female / total >= 0.62) return "F";
+  }
   for (let i = given.length - 1; i >= 0; i -= 1) {
     const ch = given[i];
-    const male = MALE_CHARS.has(ch);
-    const female = FEMALE_CHARS.has(ch);
-    if (male && !female) return "M";
-    if (female && !male) return "F";
+    const isMale = MALE_CHARS.has(ch);
+    const isFemale = FEMALE_CHARS.has(ch);
+    if (isMale && !isFemale) return "M";
+    if (isFemale && !isMale) return "F";
   }
   return "";
+}
+
+function estimateAgeFromName(name) {
+  const given = givenNameChars(name);
+  if (!given.length) return "";
+  const scores = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
+  let votes = 0;
+  given.forEach((ch, i) => {
+    const weight = i === given.length - 1 ? 2 : 1;
+    const row = nameStats.age.get(ch);
+    if (!row) return;
+    for (const [band, count] of row) {
+      scores[band] += weight * count;
+      votes += weight * count;
+    }
+  });
+  if (votes < 12) return "";
+  let best = "";
+  let bestScore = 0;
+  for (const band of AGE_BANDS) {
+    if (scores[band.id] > bestScore) {
+      best = band.id;
+      bestScore = scores[band.id];
+    }
+  }
+  if (!best || bestScore / votes < 0.38) return "";
+  return best;
 }
 
 function overall(player) {
@@ -495,23 +574,34 @@ function priorAll(player) {
 
 function changeCell(player) {
   const all = overall(player);
-  const bits = [];
+  let rankMove = "";
+  let rankPrev = "";
   if (all && typeof all.rank === "number" && typeof all.prev === "number") {
     const diff = all.prev - all.rank;
     const cls = rankMoveClass(all.rank, all.prev);
     const label = diff > 0 ? `排名 ↑${diff}` : diff < 0 ? `排名 ↓${Math.abs(diff)}` : "排名 →";
-    bits.push(`<span class="${cls}">${label}</span><span class="muted"> 上期第 ${all.prev}</span>`);
+    rankMove = `<span class="${cls}">${label}</span>`;
+    rankPrev = `<span class="muted">上期第 ${all.prev}</span>`;
   }
   const prior = priorAll(player);
   const nowPts = player.points ?? all?.points;
+  let ptsMove = "";
+  let ptsPrev = "";
   if (prior && typeof prior.points === "number" && typeof nowPts === "number") {
     const diff = nowPts - prior.points;
     const cls = diff > 0 ? "delta-up" : diff < 0 ? "delta-down" : "delta-same";
     const label = diff > 0 ? `積分 +${diff}` : diff < 0 ? `積分 ${diff}` : "積分 →";
-    bits.push(`<span class="${cls}">${label}</span><span class="muted"> 上期 ${prior.points}</span>`);
+    ptsMove = `<span class="${cls}">${label}</span>`;
+    ptsPrev = `<span class="muted">上期 ${prior.points}</span>`;
   }
-  if (!bits.length) return "";
-  return `<div><span>上期升跌</span><b>${bits.join("<br>")}</b></div>`;
+  if (!rankMove && !ptsMove) return "";
+  const line1 = rankMove && ptsMove
+    ? `${rankMove} <span class="muted">(</span>${ptsMove}<span class="muted">)</span>`
+    : rankMove || ptsMove;
+  const line2 = rankPrev && ptsPrev
+    ? `${rankPrev} <span class="muted">(</span>${ptsPrev}<span class="muted">)</span>`
+    : rankPrev || ptsPrev;
+  return `<div><span>上期升跌</span><b>${line1}${line2 ? `<br>${line2}` : ""}</b></div>`;
 }
 
 function levelText(player) {
@@ -749,18 +839,30 @@ function lcsdAgeFromItem(item) {
   };
 }
 
-function ageBand(item) {
+function recordedAgeBand(item) {
   const lcsd = lcsdAgeFromItem(item);
+  if (lcsd.band) return { id: lcsd.band, estimated: false, lcsd };
   const hktta = HKTTA_AGE[item.matches[0]?.age?.youngestGroup] || "";
-  if (lcsd.band) return lcsd.band;
-  return hktta || "";
+  if (hktta) return { id: hktta, estimated: false, lcsd };
+  return { id: "", estimated: false, lcsd };
+}
+
+function ageBand(item) {
+  const recorded = recordedAgeBand(item);
+  if (recorded.id) return recorded.id;
+  if (!guessGenderEnabled()) return "";
+  return estimateAgeFromName(item.query);
 }
 
 function ageBadge(item) {
-  const id = ageBand(item);
+  const recorded = recordedAgeBand(item);
+  const id = recorded.id || (guessGenderEnabled() ? estimateAgeFromName(item.query) : "");
   const band = AGE_BANDS.find((b) => b.id === id);
   if (!band) return "";
-  const lcsd = lcsdAgeFromItem(item);
+  if (!recorded.id) {
+    return `<span class="badge warn">估計${escapeHtml(band.label)}</span>`;
+  }
+  const lcsd = recorded.lcsd;
   if (!lcsd.code) return `<span class="badge ok">${escapeHtml(band.label)}</span>`;
   const bits = [lcsd.code];
   if (lcsd.year) bits.push(String(lcsd.year));
@@ -1471,6 +1573,7 @@ async function boot() {
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
     indexLcsdDocCodes();
+    buildNameStats();
     renderDataMeta();
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";

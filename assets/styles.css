@@ -557,6 +557,11 @@ button.ghost {
   color: var(--badge-miss-fg);
 }
 
+.badge.warn {
+  background: var(--wash);
+  color: var(--warn);
+}
+
 .badge.tone-a, .filter-chip.tone-a span { background: var(--tone-a-bg); color: var(--tone-a-fg); }
 .badge.tone-b, .filter-chip.tone-b span { background: var(--tone-b-bg); color: var(--tone-b-fg); }
 .badge.tone-c, .filter-chip.tone-c span { background: var(--tone-c-bg); color: var(--tone-c-fg); }
