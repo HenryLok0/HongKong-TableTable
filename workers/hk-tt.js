@@ -177,6 +177,7 @@ function adminPage(rows) {
     ? rows.map((row) => {
       const names = row.names.map((n) => escapeHtml(n)).join("、");
       return `<article class="card">
+        <label class="pick"><input type="checkbox" value="${escapeHtml(row.key || "")}" /></label>
         <div>
           <time>${escapeHtml(formatHkt(row.at))}</time>
           <p>${names}</p>
@@ -225,7 +226,10 @@ function adminPage(rows) {
     .hint, .empty { color: var(--muted); }
     .stat { display: inline-block; margin: 1rem 0 0; padding: .45rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: .9rem; }
     .panel { margin-top: 1.4rem; padding: 1rem 1.1rem 1.15rem; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
-    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
+    .head-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: .25rem; }
+    .pick { display: flex; padding-top: .2rem; }
+    .pick input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
     .card { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid var(--line); padding: .9rem 0; }
     .card:first-of-type { border-top: 0; }
     .card p { margin: .3rem 0 0; }
@@ -256,7 +260,11 @@ function adminPage(rows) {
     <section class="panel">
       <div class="head-row">
         <h2>最近查詢</h2>
-        <button class="btn danger" type="button" id="del-all">剷除全部</button>
+        <div class="head-actions">
+          <label class="pick"><input type="checkbox" id="pick-all" /> 全選</label>
+          <button class="btn danger" type="button" id="del-picked">剷除已選</button>
+          <button class="btn danger" type="button" id="del-all">剷除全部</button>
+        </div>
       </div>
       ${listHtml}
     </section>
@@ -280,6 +288,19 @@ function adminPage(rows) {
       }
       location.reload();
     }
+    document.getElementById("pick-all")?.addEventListener("change", (event) => {
+      const on = event.target.checked;
+      document.querySelectorAll(".card .pick input").forEach((el) => { el.checked = on; });
+    });
+    document.getElementById("del-picked")?.addEventListener("click", () => {
+      const keys = [...document.querySelectorAll(".card .pick input:checked")].map((el) => el.value).filter(Boolean);
+      if (!keys.length) {
+        alert("未有剔選紀錄。");
+        return;
+      }
+      if (!confirm(`剷除已選 ${keys.length} 次查詢？`)) return;
+      send({ keys });
+    });
     document.getElementById("del-all")?.addEventListener("click", () => {
       if (!confirm("剷除全部查詢紀錄？短連結唔會刪。")) return;
       send({ all: true });
@@ -529,12 +550,11 @@ export default {
           const deleted = await deleteAllQueryLogs(env);
           return json({ ok: true, deleted });
         }
-        const key = String(body.key || "");
-        if (!key.startsWith(QUERY_PREFIX)) {
-          return json({ error: "bad key" }, { status: 400 });
-        }
-        await env.LINKS.delete(key);
-        return json({ ok: true });
+        const keys = Array.isArray(body.keys) ? body.keys : body.key ? [body.key] : [];
+        const valid = keys.map((key) => String(key || "")).filter((key) => key.startsWith(QUERY_PREFIX));
+        if (!valid.length) return json({ error: "bad key" }, { status: 400 });
+        await Promise.all(valid.map((key) => env.LINKS.delete(key)));
+        return json({ ok: true, deleted: valid.length });
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
       }
