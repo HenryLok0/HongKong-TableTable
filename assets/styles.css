@@ -337,6 +337,10 @@ button.ghost {
   color: var(--muted);
 }
 
+.filter-group.is-active .filter-group-label {
+  color: var(--accent);
+}
+
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
@@ -375,14 +379,28 @@ button.ghost {
   font-size: 12px;
 }
 
+.filter-group.is-active .filter-chip:not(:has(input:checked)) span {
+  opacity: 0.42;
+}
+
 .filter-chip:has(input:checked) span {
-  font-weight: 600;
+  font-weight: 700;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+  box-shadow: 0 0 0 2px var(--btn-bg);
+}
+
+.filter-chip:has(input:checked) i {
+  color: inherit;
+  opacity: 0.85;
 }
 
 .filter-status {
   margin: 6px 0 0;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .settings {
@@ -547,7 +565,10 @@ button.ghost {
 .filter-chip.hs-p:has(input:checked) span,
 .filter-chip.hs-d:has(input:checked) span,
 .filter-chip.hs-d2:has(input:checked) span {
-  box-shadow: inset 0 0 0 1px currentColor;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+  box-shadow: 0 0 0 2px var(--btn-bg);
 }
 
 .grid {

@@ -1133,10 +1133,12 @@ function buildFilters(results) {
           const checked = selected.has(key) ? " checked" : "";
           const count = filterPeopleCount(f, results);
           const tone = f.group === "bucket" ? ` ${bucketTone(f.id)}` : f.group === "badge" ? ` ${badgeTone(f.id)}` : "";
-          return `<label class="filter-chip${tone}"><input type="checkbox" data-group="${f.group}" value="${f.id}"${checked} /> <span>${escapeHtml(f.label)}<i>${count}</i></span></label>`;
+          const mark = selected.has(key) ? "✓ " : "";
+          return `<label class="filter-chip${tone}"><input type="checkbox" data-group="${f.group}" value="${f.id}" data-label="${escapeHtml(f.label)}"${checked} /> <span>${mark}${escapeHtml(f.label)}<i>${count}</i></span></label>`;
         })
         .join("");
-      return `<div class="filter-group"><span class="filter-group-label">${escapeHtml(row.label)}</span><div class="filter-chips">${options}</div></div>`;
+      const active = row.items.some((f) => selected.has(`${f.group}:${f.id}`));
+      return `<div class="filter-group${active ? " is-active" : ""}"><span class="filter-group-label">${escapeHtml(row.label)}</span><div class="filter-chips">${options}</div></div>`;
     })
     .join("");
 
@@ -1151,6 +1153,23 @@ function dateOnly(value) {
   const text = String(value || "").trim();
   if (!text) return "";
   return text.slice(0, 10);
+}
+
+function uniqueSourceNameCount() {
+  const keys = new Set();
+  for (const player of snapshot.players || []) {
+    const key = normalizeName(player.name);
+    if (key) keys.add(key);
+  }
+  for (const name of Object.keys(lcsdIndex.players || {})) {
+    const key = normalizeName(name);
+    if (key) keys.add(key);
+  }
+  for (const name of Object.keys(badgeIndex.players || {})) {
+    const key = normalizeName(name);
+    if (key) keys.add(key);
+  }
+  return keys.size;
 }
 
 function periodLabel() {
@@ -1246,9 +1265,12 @@ function renderResults() {
   fillExportTable(sorted.map(({ item }) => item));
   const status = document.getElementById("filter-status");
   if (status) {
-    status.textContent = filtered.length === lastResults.length
-      ? `顯示全部 ${lastResults.length} 人`
-      : `顯示 ${filtered.length}／${lastResults.length} 人`;
+    const picked = [...document.querySelectorAll("#filter-box input:checked")].map((el) => el.getAttribute("data-label"));
+    if (!picked.length) {
+      status.textContent = `顯示全部 ${lastResults.length} 人`;
+    } else {
+      status.textContent = `已剔：${picked.join("、")} · 顯示 ${filtered.length}／${lastResults.length} 人`;
+    }
   }
 }
 
@@ -1431,7 +1453,8 @@ async function boot() {
     indexLcsdDocCodes();
     const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
     const badgeCount = Object.keys(badgeIndex.players || {}).length;
-    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名 · 恒生章別 ${badgeCount} 人${
+    const uniqueCount = uniqueSourceNameCount();
+    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名 · 共不重複 ${uniqueCount} 個姓名 · 恒生章別 ${badgeCount} 人${
       snapshot.prior?.period ? ` · 積分對照 ${snapshot.prior.period}` : ""
     }`;
   } catch (err) {
