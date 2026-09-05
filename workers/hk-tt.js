@@ -1,6 +1,8 @@
 const GITHUB_BASE = "https://henrylok0.github.io/HongKong-TableTable/";
 const VARIANT = { 鸣: "鳴", 证: "証", 杰: "傑", 启: "啟", 升: "陞", 恒: "恆" };
 const MAX_NAMES = 400;
+const SHORT_ID_LEN = 8;
+// Bind a KV namespace as LINKS in the Worker dashboard for short share URLs.
 
 function normalizeName(name) {
   return Array.from(String(name).replace(/\s+/g, ""))
@@ -14,6 +16,31 @@ function playerPoints(player) {
 
 function priorKey(player) {
   return `${player.gender}|${player.name}|${player.club || ""}|${player.school || ""}`;
+}
+
+function toBase64Url(bytes) {
+  let bin = "";
+  bytes.forEach((b) => {
+    bin += String.fromCharCode(b);
+  });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function tokenId(token) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return toBase64Url(new Uint8Array(buf)).slice(0, SHORT_ID_LEN);
+}
+
+async function saveShort(env, token) {
+  const id = await tokenId(token);
+  if (!env.LINKS) return { id, stored: false };
+  await env.LINKS.put(id, token);
+  return { id, stored: true };
+}
+
+async function loadShort(env, id) {
+  if (!env.LINKS || !id) return null;
+  return env.LINKS.get(id);
 }
 
 function json(data, init = {}) {
@@ -212,9 +239,31 @@ async function proxy(request) {
 }
 
 export default {
-  async fetch(request, _env, ctx) {
+  async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
     const path = incoming.pathname;
+
+    if (path === "/api/short") {
+      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+      if (request.method !== "POST") return new Response("POST only", { status: 405 });
+      try {
+        const body = await request.json();
+        const token = String(body.s || "");
+        if (token.length < 2 || token.length > 8000) {
+          return json({ error: "bad token" }, { status: 400 });
+        }
+        return json(await saveShort(env, token));
+      } catch (err) {
+        return json({ error: String(err) }, { status: 502 });
+      }
+    }
+
+    const shortGet = /^\/api\/short\/([A-Za-z0-9_-]{6,16})$/.exec(path);
+    if (shortGet && request.method === "GET") {
+      const token = await loadShort(env, shortGet[1]);
+      if (!token) return json({ error: "not found" }, { status: 404 });
+      return json({ s: token });
+    }
 
     if (path === "/api/meta") {
       try {

@@ -327,6 +327,7 @@ function shareParams() {
   const search = new URLSearchParams(location.search);
   return {
     s: search.get("s") || hash.get("s") || "",
+    x: search.get("x") || hash.get("x") || "",
     n: search.get("n") || hash.get("n") || "",
   };
 }
@@ -449,14 +450,46 @@ async function decodeSharePayload(token) {
 }
 
 async function readSharedNames() {
-  const { s, n } = shareParams();
+  const { s, x, n } = shareParams();
+  if (x) {
+    try {
+      const res = await fetch(apiUrl(`api/short/${encodeURIComponent(x)}`));
+      if (res.ok) {
+        const data = await res.json();
+        if (data.s) return decodeSharePayload(data.s);
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  }
   if (s) return decodeSharePayload(s);
   return parseNames(n.replace(/[,，]/g, "\n"));
 }
 
 async function shareUrlFor(names) {
   const url = pageBase();
-  if (names.length) url.searchParams.set("s", await encodeSharePayload(names));
+  if (!names.length) return url;
+  const token = await encodeSharePayload(names);
+  if (edgeLookup) {
+    try {
+      const res = await fetch(apiUrl("api/short"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ s: token }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.id && data.stored === true) {
+          url.searchParams.set("x", data.id);
+          return url;
+        }
+      }
+    } catch {
+      // Fall back to the full payload.
+    }
+  }
+  url.searchParams.set("s", token);
   return url;
 }
 
