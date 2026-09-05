@@ -150,6 +150,21 @@ footer {
   color: var(--muted);
 }
 
+.data-meta {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.data-meta .stat {
+  padding: 12px 14px;
+}
+
+.data-meta .stat b {
+  font-size: 24px;
+}
+
 .panel {
   background: var(--card);
   border: 1px solid var(--line);
@@ -647,6 +662,7 @@ footer {
 
 @media (max-width: 800px) {
   .summary,
+  .data-meta,
   .grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -654,6 +670,7 @@ footer {
 
 @media (max-width: 560px) {
   .summary,
+  .data-meta,
   .grid,
   .card-top {
     grid-template-columns: 1fr;

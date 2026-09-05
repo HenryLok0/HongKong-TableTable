@@ -1172,12 +1172,32 @@ function uniqueSourceNameCount() {
   return keys.size;
 }
 
+function formatPeriod(period) {
+  const match = /^(\d{4})-(\d{1,2})$/.exec(String(period || ""));
+  return match ? `${match[1]}年第${Number(match[2])}期` : String(period || "");
+}
+
 function periodLabel() {
-  const period = snapshot.period || "";
-  const match = /^(\d{4})-(\d{1,2})$/.exec(period);
-  const main = match ? `${match[1]}年第${Number(match[2])}期` : period;
+  const main = formatPeriod(snapshot.period || "");
   const updated = dateOnly(snapshot.updated);
   return updated ? `${main}（${updated}）` : main;
+}
+
+function renderDataMeta() {
+  const meta = document.getElementById("data-meta");
+  if (!meta) return;
+  const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
+  const badgeCount = Object.keys(badgeIndex.players || {}).length;
+  const uniqueCount = uniqueSourceNameCount();
+  const prior = snapshot.prior?.period
+    ? `積分對照 ${formatPeriod(snapshot.prior.period)}`
+    : "未有上期積分對照";
+  meta.innerHTML = `
+    <div class="stat"><span>乒總</span><b>${snapshot.players.length}</b><span class="stat-sub">${escapeHtml(periodLabel())}</span><span class="stat-sub">${escapeHtml(prior)}</span></div>
+    <div class="stat"><span>康文署</span><b>${lcsdCount}</b><span class="stat-sub">PDF 姓名</span></div>
+    <div class="stat"><span>恒生章別</span><b>${badgeCount}</b><span class="stat-sub">考試姓名</span></div>
+    <div class="stat"><span>不重複</span><b>${uniqueCount}</b><span class="stat-sub">三個來源合計</span></div>
+  `;
 }
 
 function updateStats(results) {
@@ -1451,12 +1471,7 @@ async function boot() {
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
     indexLcsdDocCodes();
-    const lcsdCount = Object.keys(lcsdIndex.players || {}).length;
-    const badgeCount = Object.keys(badgeIndex.players || {}).length;
-    const uniqueCount = uniqueSourceNameCount();
-    meta.textContent = `目前資料：乒總 ${periodLabel()}，${snapshot.players.length} 人 · 康文署 PDF ${lcsdCount} 個姓名 · 共不重複 ${uniqueCount} 個姓名 · 恒生章別 ${badgeCount} 人${
-      snapshot.prior?.period ? ` · 積分對照 ${snapshot.prior.period}` : ""
-    }`;
+    renderDataMeta();
   } catch (err) {
     meta.textContent = "排名資料載入失敗。請先執行 python scripts/fetch_rankings.py";
     console.error(err);
