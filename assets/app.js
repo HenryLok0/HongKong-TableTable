@@ -1,12 +1,3 @@
-const VARIANT = {
-  鸣: "鳴",
-  证: "証",
-  杰: "傑",
-  启: "啟",
-  升: "陞",
-  恒: "恆",
-};
-
 const GROUP_ORDER = ["ALL", "U21", "U19", "U17", "U15", "U13", "U11", "U9"];
 
 const BUCKETS = [
@@ -249,9 +240,7 @@ function escapeHtml(value) {
 }
 
 function normalizeName(name) {
-  return Array.from(String(name).replace(/\s+/g, ""))
-    .map((ch) => VARIANT[ch] || ch)
-    .join("");
+  return String(name).replace(/\s+/g, "");
 }
 
 function parseNames(raw) {

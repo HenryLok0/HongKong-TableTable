@@ -24,7 +24,6 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 
-VARIANT = str.maketrans({"鸣": "鳴", "证": "証", "杰": "傑", "启": "啟", "升": "陞", "恒": "恆"})
 NAME_RE = re.compile(r"[\u4e00-\u9fff]{2,4}")
 NUMBERED_NAME_RE = re.compile(r"(?:^|[^\u4e00-\u9fff])(\d{1,3})\s*([\u4e00-\u9fff]{2,4})(?:\s+|$)")
 GROUP_RE = re.compile(r"\b([MF][A-Z]{1,2}\d?)\b")
@@ -83,7 +82,7 @@ def http_request(url: str, data: bytes | None = None) -> tuple[int, bytes]:
 
 
 def normalize_name(name: str) -> str:
-    return re.sub(r"\s+", "", name).translate(VARIANT)
+    return re.sub(r"\s+", "", name)
 
 
 def is_person_name(name: str) -> bool:

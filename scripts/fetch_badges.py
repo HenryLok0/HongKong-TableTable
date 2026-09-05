@@ -20,7 +20,6 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
-VARIANT = str.maketrans({"鸣": "鳴", "证": "証", "杰": "傑", "启": "啟", "升": "陞", "恒": "恆"})
 HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.I)
 SESSION_RE = re.compile(
     r"/BadgeScheme/(\d{4})/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/",
@@ -71,7 +70,7 @@ def http_get(url: str) -> tuple[int, bytes]:
 
 
 def normalize_name(name: str) -> str:
-    return re.sub(r"\s+", "", name).translate(VARIANT)
+    return re.sub(r"\s+", "", name)
 
 
 def abs_url(href: str) -> str:

@@ -1,13 +1,10 @@
 const GITHUB_BASE = "https://henrylok0.github.io/HongKong-TableTable/";
-const VARIANT = { 鸣: "鳴", 证: "証", 杰: "傑", 启: "啟", 升: "陞", 恒: "恆" };
 const MAX_NAMES = 400;
 const SHORT_ID_LEN = 8;
 // Bind a KV namespace as LINKS in the Worker dashboard for short share URLs.
 
 function normalizeName(name) {
-  return Array.from(String(name).replace(/\s+/g, ""))
-    .map((ch) => VARIANT[ch] || ch)
-    .join("");
+  return String(name).replace(/\s+/g, "");
 }
 
 function playerPoints(player) {
