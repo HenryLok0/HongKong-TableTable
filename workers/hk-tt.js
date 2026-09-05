@@ -33,8 +33,14 @@ async function tokenId(token) {
 async function saveShort(env, token) {
   const id = await tokenId(token);
   if (!env.LINKS) return { id, stored: false, reason: "missing LINKS kv" };
-  await env.LINKS.put(id, token);
-  return { id, stored: true };
+  try {
+    const existing = await env.LINKS.get(id);
+    if (existing === token) return { id, stored: true };
+    await env.LINKS.put(id, token);
+    return { id, stored: true };
+  } catch {
+    return { id, stored: false, reason: "kv write failed" };
+  }
 }
 
 async function loadShort(env, id) {
@@ -65,20 +71,25 @@ async function logQueries(env, names) {
   }
   if (!clean.length) return;
   const id = `${QUERY_PREFIX}${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-  await env.LINKS.put(id, JSON.stringify({ at: Date.now(), names: clean }));
+  try {
+    await env.LINKS.put(id, JSON.stringify({ at: Date.now(), names: clean }));
+  } catch {
+    // Daily KV write quota; skip this log.
+  }
 }
 
-function adminOk(request, env) {
+function adminOk(request, env, extraK) {
   const secret = env.ADMIN_SECRET;
   if (!secret) return false;
   const url = new URL(request.url);
   if (url.searchParams.get("k") === secret) return true;
+  if (extraK && extraK === secret) return true;
   const cookie = request.headers.get("Cookie") || "";
   return cookie.split(";").some((part) => part.trim() === `hktt_admin=${secret}`);
 }
 
 function adminCookie(env) {
-  return `hktt_admin=${env.ADMIN_SECRET}; Path=/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`;
+  return `hktt_admin=${env.ADMIN_SECRET}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`;
 }
 
 function escapeHtml(value) {
@@ -105,7 +116,7 @@ async function readQueryLogs(env) {
       if (!raw) continue;
       try {
         const row = JSON.parse(raw);
-        if (Array.isArray(row.names) && row.names.length) rows.push(row);
+        if (Array.isArray(row.names) && row.names.length) rows.push({ ...row, key: key.name });
       } catch {
         // Skip bad rows.
       }
@@ -114,6 +125,18 @@ async function readQueryLogs(env) {
   } while (cursor && rows.length < QUERY_LOG_LIMIT * 2);
   rows.sort((a, b) => (b.at || 0) - (a.at || 0));
   return rows.slice(0, QUERY_LOG_LIMIT);
+}
+
+async function deleteAllQueryLogs(env) {
+  let cursor;
+  let deleted = 0;
+  do {
+    const page = await env.LINKS.list({ prefix: QUERY_PREFIX, limit: 100, cursor });
+    await Promise.all(page.keys.map((key) => env.LINKS.delete(key.name)));
+    deleted += page.keys.length;
+    cursor = page.list_complete ? "" : page.cursor;
+  } while (cursor);
+  return deleted;
 }
 
 function namesToBytes(names) {
@@ -158,7 +181,10 @@ function adminPage(rows) {
           <time>${escapeHtml(formatHkt(row.at))}</time>
           <p>${names}</p>
         </div>
-        <a href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果(${row.names.length}人)</a>
+        <div class="actions">
+          <a href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果(${row.names.length}人)</a>
+          <button type="button" data-del="${escapeHtml(row.key || "")}">剷除</button>
+        </div>
       </article>`;
     }).join("")
     : "<p>未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>";
@@ -176,17 +202,50 @@ function adminPage(rows) {
     ul { padding-left: 1.2rem; }
     article { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid #ddd; padding: .75rem 0; }
     article p { margin: .25rem 0 0; }
-    article a { flex-shrink: 0; }
+    article a, article button { flex-shrink: 0; }
+    .actions { display: flex; flex-direction: column; gap: .35rem; align-items: flex-end; }
+    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+    button { cursor: pointer; }
     time { color: #666; font-size: .85rem; }
   </style>
 </head>
 <body>
   <h1>查詢紀錄</h1>
   <p class="hint">只有你睇到。主站冇呢頁連結。共 ${rows.length} 次查詢。</p>
-  <h2>最近查詢</h2>
+  <div class="head-row">
+    <h2>最近查詢</h2>
+    <button type="button" id="del-all">剷除全部</button>
+  </div>
   ${listHtml}
   <h2>最常被查</h2>
   <ul>${topHtml}</ul>
+  <script>
+    const k = new URLSearchParams(location.search).get("k") || "";
+    async function send(body) {
+      const res = await fetch("/api/admin/queries", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, k }),
+      });
+      if (!res.ok) {
+        alert("剷除失敗");
+        return;
+      }
+      location.reload();
+    }
+    document.getElementById("del-all")?.addEventListener("click", () => {
+      if (!confirm("剷除全部查詢紀錄？短連結唔會刪。")) return;
+      send({ all: true });
+    });
+    document.querySelectorAll("[data-del]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-del");
+        if (!key || !confirm("剷除呢次查詢？")) return;
+        send({ key });
+      });
+    });
+  </script>
 </body>
 </html>`;
 }
@@ -407,6 +466,29 @@ export default {
       try {
         const index = await getIndex(ctx);
         return json(metaPayload(index));
+      } catch (err) {
+        return json({ error: String(err) }, { status: 502 });
+      }
+    }
+
+    if (path === "/api/admin/queries") {
+      if (request.method !== "POST") return new Response("POST only", { status: 405 });
+      try {
+        const body = await request.json();
+        if (!adminOk(request, env, body.k)) {
+          return json({ error: "unauthorized" }, { status: 401 });
+        }
+        if (!env.LINKS) return json({ error: "LINKS kv missing" }, { status: 503 });
+        if (body.all) {
+          const deleted = await deleteAllQueryLogs(env);
+          return json({ ok: true, deleted });
+        }
+        const key = String(body.key || "");
+        if (!key.startsWith(QUERY_PREFIX)) {
+          return json({ error: "bad key" }, { status: 400 });
+        }
+        await env.LINKS.delete(key);
+        return json({ ok: true });
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
       }

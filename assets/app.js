@@ -514,6 +514,8 @@ async function copyShareLink() {
       setShareStatus("已複製短連結，對方打開就會自動查詢呢份名單。");
     } else if (url._shortFail === "missing LINKS kv") {
       setShareStatus("已複製長連結。短連結要喺 Cloudflare Worker 繫結 KV，變數名必須係 LINKS。");
+    } else if (url._shortFail === "kv write failed") {
+      setShareStatus("已複製長連結。今日短連結寫入額已滿，用返完整 ?s= 連結，功能一樣。");
     } else if (url._shortFail) {
       setShareStatus(`已複製長連結。短連結未生效（${url._shortFail}）。請用 hktt.henrylok.me 打開。`);
     } else {
