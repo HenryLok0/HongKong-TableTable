@@ -1,7 +1,9 @@
 const GITHUB_BASE = "https://henrylok0.github.io/HongKong-TableTable/";
 const MAX_NAMES = 400;
 const SHORT_ID_LEN = 8;
-// Bind a KV namespace as LINKS in the Worker dashboard for short share URLs.
+// Bind KV as LINKS. Set Worker secret ADMIN_SECRET for /admin query logs.
+const QUERY_PREFIX = "q:";
+const QUERY_LOG_LIMIT = 300;
 
 function normalizeName(name) {
   return String(name).replace(/\s+/g, "");
@@ -48,6 +50,112 @@ function json(data, init = {}) {
       "cache-control": "no-store",
     },
   });
+}
+
+async function logQueries(env, names) {
+  if (!env.LINKS) return;
+  const clean = [];
+  const seen = new Set();
+  for (const raw of names || []) {
+    const query = String(raw || "").replace(/\s+/g, "").trim();
+    if (!query || seen.has(query)) continue;
+    seen.add(query);
+    clean.push(query);
+    if (clean.length >= MAX_NAMES) break;
+  }
+  if (!clean.length) return;
+  const id = `${QUERY_PREFIX}${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+  await env.LINKS.put(id, JSON.stringify({ at: Date.now(), names: clean }));
+}
+
+function adminOk(request, env) {
+  const secret = env.ADMIN_SECRET;
+  if (!secret) return false;
+  const url = new URL(request.url);
+  if (url.searchParams.get("k") === secret) return true;
+  const cookie = request.headers.get("Cookie") || "";
+  return cookie.split(";").some((part) => part.trim() === `hktt_admin=${secret}`);
+}
+
+function adminCookie(env) {
+  return `hktt_admin=${env.ADMIN_SECRET}; Path=/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+}
+
+function formatHkt(ms) {
+  return new Date(ms).toLocaleString("zh-HK", { timeZone: "Asia/Hong_Kong", hour12: false });
+}
+
+async function readQueryLogs(env) {
+  const rows = [];
+  let cursor;
+  do {
+    const page = await env.LINKS.list({ prefix: QUERY_PREFIX, limit: 100, cursor });
+    for (const key of page.keys) {
+      const raw = await env.LINKS.get(key.name);
+      if (!raw) continue;
+      try {
+        const row = JSON.parse(raw);
+        if (Array.isArray(row.names) && row.names.length) rows.push(row);
+      } catch {
+        // Skip bad rows.
+      }
+    }
+    cursor = page.list_complete ? "" : page.cursor;
+  } while (cursor && rows.length < QUERY_LOG_LIMIT * 2);
+  rows.sort((a, b) => (b.at || 0) - (a.at || 0));
+  return rows.slice(0, QUERY_LOG_LIMIT);
+}
+
+function adminPage(rows) {
+  const counts = new Map();
+  for (const row of rows) {
+    for (const name of row.names) counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-HK")).slice(0, 40);
+  const topHtml = top.length
+    ? top.map(([name, n]) => `<li>${escapeHtml(name)}（${n}）</li>`).join("")
+    : "<li>未有紀錄</li>";
+  const listHtml = rows.length
+    ? rows.map((row) => {
+      const names = row.names.map((n) => escapeHtml(n)).join("、");
+      return `<article><time>${escapeHtml(formatHkt(row.at))}</time><p>${names}</p></article>`;
+    }).join("")
+    : "<p>未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>";
+  return `<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>查詢紀錄</title>
+  <style>
+    body { font-family: sans-serif; max-width: 52rem; margin: 1.5rem auto; padding: 0 1rem; color: #1b1b1b; }
+    h1 { font-size: 1.25rem; }
+    .hint { color: #555; }
+    ul { padding-left: 1.2rem; }
+    article { border-top: 1px solid #ddd; padding: .75rem 0; }
+    time { color: #666; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>查詢紀錄</h1>
+  <p class="hint">只有你睇到。主站冇呢頁連結。共 ${rows.length} 次查詢。</p>
+  <h2>最常被查</h2>
+  <ul>${topHtml}</ul>
+  <h2>最近查詢</h2>
+  ${listHtml}
+</body>
+</html>`;
 }
 
 async function originJson(file, ctx) {
@@ -271,6 +379,28 @@ export default {
       }
     }
 
+    if (path === "/admin") {
+      if (!env.ADMIN_SECRET) {
+        return new Response("Set Worker secret ADMIN_SECRET", { status: 503 });
+      }
+      if (!adminOk(request, env)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      if (!env.LINKS) {
+        return new Response("LINKS kv missing", { status: 503 });
+      }
+      const rows = await readQueryLogs(env);
+      const headers = {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "X-Robots-Tag": "noindex",
+      };
+      if (incoming.searchParams.get("k") === env.ADMIN_SECRET) {
+        headers["Set-Cookie"] = adminCookie(env);
+      }
+      return new Response(adminPage(rows), { headers });
+    }
+
     if (path === "/api/lookup") {
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204 });
@@ -280,8 +410,10 @@ export default {
       }
       try {
         const body = await request.json();
+        const names = Array.isArray(body.names) ? body.names : [];
+        ctx.waitUntil(logQueries(env, names));
         const index = await getIndex(ctx);
-        return json(lookupNames(index, Array.isArray(body.names) ? body.names : []));
+        return json(lookupNames(index, names));
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
       }
