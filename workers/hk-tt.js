@@ -150,10 +150,10 @@ function adminPage(rows) {
 <body>
   <h1>查詢紀錄</h1>
   <p class="hint">只有你睇到。主站冇呢頁連結。共 ${rows.length} 次查詢。</p>
-  <h2>最常被查</h2>
-  <ul>${topHtml}</ul>
   <h2>最近查詢</h2>
   ${listHtml}
+  <h2>最常被查</h2>
+  <ul>${topHtml}</ul>
 </body>
 </html>`;
 }
