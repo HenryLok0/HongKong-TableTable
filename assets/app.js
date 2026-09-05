@@ -192,7 +192,13 @@ let badgeIndex = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
-let nameStats = { gender: new Map(), age: new Map() };
+let nameStats = {
+  gender: new Map(),
+  age: new Map(),
+  givenAge: new Map(),
+  ageByGender: { M: new Map(), F: new Map() },
+  defaultAge: { M: "", F: "", ALL: "" },
+};
 
 function loadSettings() {
   try {
@@ -430,6 +436,23 @@ function givenNameChars(name) {
   return chars.slice(1);
 }
 
+function bumpCountMap(map, key) {
+  map.set(key, (map.get(key) || 0) + 1);
+}
+
+function modeFromCountMap(map) {
+  if (!map || !map.size) return "";
+  let best = "";
+  let bestN = 0;
+  for (const [key, count] of map) {
+    if (count > bestN) {
+      best = key;
+      bestN = count;
+    }
+  }
+  return best;
+}
+
 function bumpGenderStat(ch, gender) {
   const row = nameStats.gender.get(ch) || { M: 0, F: 0 };
   row[gender] += 1;
@@ -438,28 +461,53 @@ function bumpGenderStat(ch, gender) {
 
 function bumpAgeStat(ch, band) {
   const row = nameStats.age.get(ch) || new Map();
-  row.set(band, (row.get(band) || 0) + 1);
+  bumpCountMap(row, band);
   nameStats.age.set(ch, row);
 }
 
+function bumpGivenAge(givenKey, band) {
+  if (!givenKey) return;
+  const row = nameStats.givenAge.get(givenKey) || new Map();
+  bumpCountMap(row, band);
+  nameStats.givenAge.set(givenKey, row);
+}
+
+function recordNameAge(name, band, gender) {
+  if (!band) return;
+  const given = givenNameChars(name);
+  const givenKey = given.join("");
+  bumpGivenAge(givenKey, band);
+  given.forEach((ch) => bumpAgeStat(ch, band));
+  if (gender === "M" || gender === "F") bumpCountMap(nameStats.ageByGender[gender], band);
+  bumpCountMap(nameStats.ageByGender.ALL || (nameStats.ageByGender.ALL = new Map()), band);
+}
+
 function buildNameStats() {
-  nameStats = { gender: new Map(), age: new Map() };
+  nameStats = {
+    gender: new Map(),
+    age: new Map(),
+    givenAge: new Map(),
+    ageByGender: { M: new Map(), F: new Map(), ALL: new Map() },
+    defaultAge: { M: "", F: "", ALL: "" },
+  };
   for (const player of snapshot.players || []) {
     const given = givenNameChars(player.name);
-    if ((player.gender === "M" || player.gender === "F")) {
+    if (player.gender === "M" || player.gender === "F") {
       given.forEach((ch) => bumpGenderStat(ch, player.gender));
     }
     const band = HKTTA_AGE[player.age?.youngestGroup] || "";
-    if (band) given.forEach((ch) => bumpAgeStat(ch, band));
+    recordNameAge(player.name, band, player.gender);
   }
   for (const [name, recs] of Object.entries(lcsdIndex.players || {})) {
     const item = { query: name, matches: [], lcsd: recs };
     const given = givenNameChars(name);
     const gender = recordedGender(item);
     if (gender) given.forEach((ch) => bumpGenderStat(ch, gender));
-    const band = lcsdAgeFromItem(item).band;
-    if (band) given.forEach((ch) => bumpAgeStat(ch, band));
+    recordNameAge(name, lcsdAgeFromItem(item).band, gender);
   }
+  nameStats.defaultAge.M = modeFromCountMap(nameStats.ageByGender.M);
+  nameStats.defaultAge.F = modeFromCountMap(nameStats.ageByGender.F);
+  nameStats.defaultAge.ALL = modeFromCountMap(nameStats.ageByGender.ALL);
 }
 
 function estimateGenderFromName(name) {
@@ -475,9 +523,8 @@ function estimateGenderFromName(name) {
     female += weight * row.F;
   });
   const total = male + female;
-  if (total >= 8) {
-    if (male / total >= 0.62) return "M";
-    if (female / total >= 0.62) return "F";
+  if (total >= 1) {
+    if (male !== female) return male > female ? "M" : "F";
   }
   for (let i = given.length - 1; i >= 0; i -= 1) {
     const ch = given[i];
@@ -489,31 +536,26 @@ function estimateGenderFromName(name) {
   return "";
 }
 
-function estimateAgeFromName(name) {
+function estimateAgeFromName(name, genderHint) {
   const given = givenNameChars(name);
-  if (!given.length) return "";
-  const scores = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
-  let votes = 0;
-  given.forEach((ch, i) => {
-    const weight = i === given.length - 1 ? 2 : 1;
-    const row = nameStats.age.get(ch);
-    if (!row) return;
-    for (const [band, count] of row) {
-      scores[band] += weight * count;
-      votes += weight * count;
-    }
-  });
-  if (votes < 12) return "";
-  let best = "";
-  let bestScore = 0;
-  for (const band of AGE_BANDS) {
-    if (scores[band.id] > bestScore) {
-      best = band.id;
-      bestScore = scores[band.id];
-    }
+  const givenKey = given.join("");
+  const exact = modeFromCountMap(nameStats.givenAge.get(givenKey));
+  if (exact) return exact;
+  if (given.length) {
+    const last = modeFromCountMap(nameStats.age.get(given[given.length - 1]));
+    if (last) return last;
+    const scores = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
+    given.forEach((ch, i) => {
+      const weight = i === given.length - 1 ? 3 : 1;
+      const row = nameStats.age.get(ch);
+      if (!row) return;
+      for (const [band, count] of row) scores[band] += weight * count;
+    });
+    const best = AGE_BANDS.reduce((cur, band) => (scores[band.id] > scores[cur] ? band.id : cur), AGE_BANDS[0].id);
+    if (scores[best] > 0) return best;
   }
-  if (!best || bestScore / votes < 0.38) return "";
-  return best;
+  const gender = genderHint || estimateGenderFromName(name);
+  return nameStats.defaultAge[gender] || nameStats.defaultAge.ALL || "";
 }
 
 function overall(player) {
@@ -833,12 +875,14 @@ function ageBand(item) {
   const recorded = recordedAgeBand(item);
   if (recorded.id) return recorded.id;
   if (!guessGenderEnabled()) return "";
-  return estimateAgeFromName(item.query);
+  return estimateAgeFromName(item.query, recordedGender(item) || estimateGenderFromName(item.query));
 }
 
 function ageBadge(item) {
   const recorded = recordedAgeBand(item);
-  const id = recorded.id || (guessGenderEnabled() ? estimateAgeFromName(item.query) : "");
+  const id = recorded.id || (guessGenderEnabled()
+    ? estimateAgeFromName(item.query, recordedGender(item) || estimateGenderFromName(item.query))
+    : "");
   const band = AGE_BANDS.find((b) => b.id === id);
   if (!band) return "";
   if (!recorded.id) {
