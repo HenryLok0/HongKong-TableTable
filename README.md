@@ -1,11 +1,20 @@
-# HongKong-TableTable
+# 香港乒乓球排名查詢
 
-Paste a list of names. The app looks them up against:
+Static site: paste a list of Chinese names and look them up against published Hong Kong table tennis records.
 
-- HKTTA published ranking PDFs (`scripts/fetch_rankings.py`)
-- LCSD district age-group table tennis schedule/result PDFs (`scripts/fetch_lcsd.py`)
+Live: [https://henrylok0.github.io/HongKong-TableTable/](https://henrylok0.github.io/HongKong-TableTable/)
 
-LCSD document filenames change every year. The listing portal is [地區分齡比賽](https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do) (filter 乒乓球). Older PDFs that are still online can be added to `data/lcsd_extra_urls.json`.
+## What it matches
+
+| Source | Script | Snapshot |
+| --- | --- | --- |
+| HKTTA computer ranking PDFs (points, official rank, U-groups, club / school / coach) | `scripts/fetch_rankings.py` | `data/rankings.json` |
+| LCSD district age-group schedule / result PDFs | `scripts/fetch_lcsd.py` | `data/lcsd.json`, `data/lcsd_age_maps.json` |
+| Hang Seng public badge-exam timetables (and result PDFs for pass/fail) | `scripts/fetch_badges.py` | `data/badges.json` |
+
+The browser only reads those JSON files. It does not scrape HKTTA / LCSD / HSTTA at runtime.
+
+LCSD filenames change every year. The listing is [地區分齡比賽](https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do) (filter 乒乓球). Older PDFs still online can be added to `data/lcsd_extra_urls.json`. Previous LCSD names are kept when the portal only lists the current year.
 
 ## Local
 
@@ -13,6 +22,7 @@ LCSD document filenames change every year. The listing portal is [地區分齡�
 pip install -r requirements.txt
 python scripts/fetch_rankings.py
 python scripts/fetch_lcsd.py
+python scripts/fetch_badges.py
 python -m http.server 8080
 ```
 
@@ -20,18 +30,21 @@ Open `http://localhost:8080`.
 
 ## GitHub Pages
 
-1. Push this repo to GitHub.
-2. Settings → Pages → Deploy from a branch → `main` / `/ (root)`.
-3. Site URL: `https://henrylok0.github.io/HongKong-TableTable/`
+Settings → Pages → Deploy from a branch → `main` / `/ (root)`.
+
+After each push, hard-refresh the live site (CSS/JS are cache-busted with `?v=` in `index.html`).
 
 ## Auto update
 
-GitHub Pages is static, so the site cannot scrape HKTTA/LCSD in the browser. `.github/workflows/update-rankings.yml` runs every day at 10:00 HKT (`cron: 0 2 * * *`) and on manual **Actions → Update ranking data → Run workflow**.
+`.github/workflows/update-rankings.yml` runs daily at **10:00 HKT** (`cron: 0 2 * * *` UTC) and on **Actions → Update ranking data → Run workflow**.
 
-Required on GitHub:
+The job re-downloads the latest published PDFs and commits `data/rankings.json`, `data/lcsd.json`, `data/lcsd_age_maps.json`, and `data/badges.json` if they changed.
+
+That is a **daily check**, not a daily new ranking. HKTTA lists are issued by period (期); LCSD and badge PDFs appear when those events are published. GitHub may delay or skip scheduled workflows on inactive repos.
+
+Required:
 
 1. Settings → Actions → General → Workflow permissions → **Read and write**.
-2. Keep Actions enabled on the default branch. Scheduled workflows only run after the file is on that branch.
-3. First push of this workflow, then optionally run it once by hand to confirm.
+2. Keep Actions enabled on the default branch.
 
-The job downloads the latest HKTTA ranking PDFs and LCSD table tennis PDFs, writes `data/rankings.json` and `data/lcsd.json`, and commits if they changed. Old LCSD documents are kept so history is not wiped when the listing page only shows the current year.
+LCSD and badge fetches use `continue-on-error` so a broken PDF listing does not block the HKTTA snapshot.
