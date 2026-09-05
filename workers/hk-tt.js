@@ -298,7 +298,7 @@ function adminPage(rows) {
         alert("未有剔選紀錄。");
         return;
       }
-      if (!confirm(`剷除已選 ${keys.length} 次查詢？`)) return;
+      if (!confirm("剷除已選 " + keys.length + " 次查詢？")) return;
       send({ keys });
     });
     document.getElementById("del-all")?.addEventListener("click", () => {
