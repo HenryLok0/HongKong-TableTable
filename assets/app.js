@@ -193,6 +193,7 @@ const FILTERS = [
   { group: "bucket", id: "none", label: "完全沒有任何紀錄" },
   ...BADGE_FILTERS.map((b) => ({ group: "badge", id: b.id, label: b.label })),
   ...AGE_BANDS.map((b) => ({ group: "age", id: b.id, label: b.label })),
+  { group: "age", id: "none", label: "冇資料" },
 ];
 
 const FILTER_GROUP_LABELS = {
@@ -1099,7 +1100,8 @@ function resolvedAge(item) {
 }
 
 function ageBandIds(item) {
-  return resolvedAge(item)?.ids || [];
+  const ids = resolvedAge(item)?.ids || [];
+  return ids.length ? ids : ["none"];
 }
 
 function ageBadge(item) {
@@ -1592,12 +1594,15 @@ function updateStats(results) {
   }
 
   const ageCounts = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
+  ageCounts.none = 0;
   for (const item of results) {
-    for (const id of ageBandIds(item)) ageCounts[id] += 1;
+    for (const id of ageBandIds(item)) ageCounts[id] = (ageCounts[id] || 0) + 1;
   }
-  document.getElementById("age-list").innerHTML = AGE_BANDS.filter((b) => ageCounts[b.id] > 0)
-    .map((b) => `<li>${escapeHtml(b.label)}（${ageCounts[b.id]}）</li>`)
-    .join("");
+  const ageRows = [
+    ...AGE_BANDS.filter((b) => ageCounts[b.id] > 0).map((b) => `${escapeHtml(b.label)}（${ageCounts[b.id]}）`),
+    ...(ageCounts.none ? [`冇資料（${ageCounts.none}）`] : []),
+  ];
+  document.getElementById("age-list").innerHTML = ageRows.map((row) => `<li>${row}</li>`).join("");
 
   document.getElementById("summary").classList.remove("hidden");
   document.getElementById("summary").innerHTML = `
