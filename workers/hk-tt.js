@@ -171,23 +171,23 @@ function adminPage(rows) {
   }
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-HK")).slice(0, 40);
   const topHtml = top.length
-    ? top.map(([name, n]) => `<li><a href="${escapeHtml(resultHrefS(name))}" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>（${n}）</li>`).join("")
-    : "<li>未有紀錄</li>";
+    ? top.map(([name, n]) => `<a class="chip" href="${escapeHtml(resultHrefS(name))}" target="_blank" rel="noreferrer">${escapeHtml(name)}<span>${n}</span></a>`).join("")
+    : `<p class="empty">未有紀錄</p>`;
   const listHtml = rows.length
     ? rows.map((row) => {
       const names = row.names.map((n) => escapeHtml(n)).join("、");
-      return `<article>
+      return `<article class="card">
         <div>
           <time>${escapeHtml(formatHkt(row.at))}</time>
           <p>${names}</p>
         </div>
         <div class="actions">
-          <a href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果(${row.names.length}人)</a>
-          <button type="button" data-del="${escapeHtml(row.key || "")}">剷除</button>
+          <a class="btn" href="${escapeHtml(resultHref(row.names))}" target="_blank" rel="noreferrer">結果(${row.names.length}人)</a>
+          <button class="btn danger" type="button" data-del="${escapeHtml(row.key || "")}">剷除</button>
         </div>
       </article>`;
     }).join("")
-    : "<p>未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>";
+    : `<p class="empty">未有查詢紀錄。只有經 hktt.henrylok.me 嘅查詢會記入。</p>`;
   return `<!DOCTYPE html>
 <html lang="zh-HK">
 <head>
@@ -195,30 +195,76 @@ function adminPage(rows) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
   <title>查詢紀錄</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: sans-serif; max-width: 52rem; margin: 1.5rem auto; padding: 0 1rem; color: #1b1b1b; }
-    h1 { font-size: 1.25rem; }
-    .hint { color: #555; }
-    ul { padding-left: 1.2rem; }
-    article { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid #ddd; padding: .75rem 0; }
-    article p { margin: .25rem 0 0; }
-    article a, article button { flex-shrink: 0; }
-    .actions { display: flex; flex-direction: column; gap: .35rem; align-items: flex-end; }
-    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
-    button { cursor: pointer; }
-    time { color: #666; font-size: .85rem; }
+    :root {
+      --bg: #f4efe6; --ink: #1c2430; --muted: #5b6573; --card: #fffdf8;
+      --line: #ddd4c6; --accent: #d85a1a; --miss: #8a3b3b; --wash: #ffe2c8;
+      --heading: #16324f; --btn: #16324f; --chip: #f3eee4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12161c; --ink: #e8e4dc; --muted: #b4bcc6; --card: #1c222b;
+        --line: #3d4654; --accent: #f08a4c; --miss: #f0c0c0; --wash: #2a221c;
+        --heading: #f3efe8; --btn: #e8e4dc; --chip: #2a3038;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100dvh; color: var(--ink);
+      background-color: var(--bg);
+      background-image: radial-gradient(circle at 12% -10%, var(--wash) 0, transparent 32%);
+      font-family: "Noto Sans TC", sans-serif; line-height: 1.55;
+    }
+    main { width: min(44rem, calc(100% - 32px)); margin: 0 auto; padding: 2.5rem 0 4rem; }
+    .eyebrow { margin: 0 0 .4rem; letter-spacing: .14em; text-transform: uppercase; font-size: .75rem; color: var(--accent); font-weight: 700; }
+    h1 { margin: 0; font-family: "Noto Serif TC", serif; font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--heading); }
+    h2 { margin: 0; font-size: 1.05rem; color: var(--heading); }
+    .hint, .empty { color: var(--muted); }
+    .stat { display: inline-block; margin: 1rem 0 0; padding: .45rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: .9rem; }
+    .panel { margin-top: 1.4rem; padding: 1rem 1.1rem 1.15rem; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+    .head-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
+    .card { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid var(--line); padding: .9rem 0; }
+    .card:first-of-type { border-top: 0; }
+    .card p { margin: .3rem 0 0; }
+    time { color: var(--muted); font-size: .82rem; }
+    .actions { display: flex; flex-direction: column; gap: .4rem; min-width: 7.2rem; }
+    .btn {
+      display: inline-flex; justify-content: center; align-items: center;
+      padding: .4rem .7rem; border-radius: 999px; text-decoration: none; font: inherit; font-size: .85rem;
+      background: var(--btn); color: #fff; border: 1px solid var(--btn); cursor: pointer; white-space: nowrap;
+    }
+    @media (prefers-color-scheme: dark) { .btn { color: #12161c; } }
+    .btn.danger { color: var(--miss); border-color: var(--miss); background: transparent; }
+    .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+    .chip {
+      display: inline-flex; gap: .4rem; align-items: center;
+      padding: .35rem .7rem; background: var(--chip); border: 1px solid var(--line);
+      border-radius: 999px; color: var(--ink); text-decoration: none; font-size: .9rem;
+    }
+    .chip span { color: var(--muted); font-size: .8rem; }
   </style>
 </head>
 <body>
-  <h1>查詢紀錄</h1>
-  <p class="hint">只有你睇到。主站冇呢頁連結。共 ${rows.length} 次查詢。</p>
-  <div class="head-row">
-    <h2>最近查詢</h2>
-    <button type="button" id="del-all">剷除全部</button>
-  </div>
-  ${listHtml}
-  <h2>最常被查</h2>
-  <ul>${topHtml}</ul>
+  <main>
+    <p class="eyebrow">Admin</p>
+    <h1>查詢紀錄</h1>
+    <p class="hint">只有你睇到。主站冇呢頁連結。</p>
+    <p class="stat">共 <b>${rows.length}</b> 次查詢</p>
+    <section class="panel">
+      <div class="head-row">
+        <h2>最近查詢</h2>
+        <button class="btn danger" type="button" id="del-all">剷除全部</button>
+      </div>
+      ${listHtml}
+    </section>
+    <section class="panel">
+      <h2>最常被查</h2>
+      <div class="chips">${topHtml}</div>
+    </section>
+  </main>
   <script>
     const k = new URLSearchParams(location.search).get("k") || "";
     async function send(body) {
