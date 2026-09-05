@@ -50,6 +50,16 @@ const HKTTA_AGE = {
   U21: "19-24",
 };
 
+const HKTTA_AGE_RANGE = {
+  U9: { min: 0, max: 9 },
+  U11: { min: 10, max: 11 },
+  U13: { min: 12, max: 13 },
+  U15: { min: 14, max: 15 },
+  U17: { min: 16, max: 17 },
+  U19: { min: 18, max: 19 },
+  U21: { min: 19, max: 21 },
+};
+
 function ageRange(min, max, doubles = false) {
   return { min, max, doubles };
 }
@@ -483,7 +493,14 @@ function buildNameStats() {
     const given = givenNameChars(name);
     const gender = recordedGender(item);
     if (gender) given.forEach((ch) => bumpGenderStat(ch, gender));
-    recordNameAge(name, lcsdAgeFromItem(item).band);
+    const key = normalizeName(name);
+    const onHkttaYouth = (snapshot.players || []).some(
+      (p) => normalizeName(p.name) === key && HKTTA_AGE[p.age?.youngestGroup]
+    );
+    if (onHkttaYouth) continue;
+    const age = lcsdAgeFromItem(item);
+    if (age.doubles) continue;
+    recordNameAge(name, age.band || "");
   }
 }
 
@@ -846,9 +863,23 @@ function schemeForRecord(rec) {
 }
 
 function bandFromEstimatedAge(nowMin, nowMax) {
-  const age = nowMax === OPEN ? nowMin : nowMax;
-  const hit = AGE_BANDS.find((b) => age >= b.min && age <= b.max);
+  const top = nowMax === OPEN ? nowMin : nowMax;
+  const exact = AGE_BANDS.find((b) => nowMin >= b.min && top <= b.max);
+  if (exact) return exact.id;
+  const mid = nowMax === OPEN ? nowMin : (nowMin + nowMax) / 2;
+  const hit = AGE_BANDS.find((b) => mid >= b.min && mid <= b.max);
   return hit?.id || "";
+}
+
+function isDoublesGroup(code, doublesFlag) {
+  if (doublesFlag) return true;
+  return /^[MF]([KLM]|D[SAYBC])$/.test(String(code || "").toUpperCase());
+}
+
+function fineBandContaining(min, max) {
+  if (!Number.isFinite(min)) return null;
+  const top = max === OPEN || max == null ? min : max;
+  return AGE_BANDS.find((b) => min >= b.min && top <= b.max) || null;
 }
 
 function storedAgeInfo(rec) {
@@ -896,6 +927,49 @@ function resolveLcsdGroup(raw, scheme) {
   return null;
 }
 
+function overlappingFineIds(min, max) {
+  if (!Number.isFinite(min)) return [];
+  const top = max === OPEN || max == null ? min : max;
+  return AGE_BANDS.filter((b) => b.max >= min && b.min <= top).map((b) => b.id);
+}
+
+function ageRowSpan(row) {
+  const top = row.nowMax === OPEN ? row.nowMin + 40 : row.nowMax;
+  return top - row.nowMin;
+}
+
+function mergeAgeRows(rows) {
+  if (!rows.length) return null;
+  const nowMin = Math.max(...rows.map((r) => r.nowMin));
+  const caps = rows.map((r) => (r.nowMax === OPEN ? Infinity : r.nowMax));
+  const cap = Math.min(...caps);
+  if (nowMin > cap) return pickMappedAge(rows);
+  const cite = [...rows].sort((a, b) => ageRowSpan(a) - ageRowSpan(b) || b.year - a.year)[0];
+  const nowMax = cap === Infinity ? OPEN : cap;
+  return {
+    ...cite,
+    nowMin,
+    nowMax,
+    band: bandFromEstimatedAge(nowMin, nowMax),
+  };
+}
+
+function hkttaAgeRow(item) {
+  const player = (item.matches || []).find((p) => HKTTA_AGE_RANGE[p.age?.youngestGroup]);
+  if (!player) return null;
+  const group = player.age.youngestGroup;
+  const { min, max } = HKTTA_AGE_RANGE[group];
+  return {
+    band: bandFromEstimatedAge(min, max) || overlappingFineIds(min, max)[0] || "",
+    code: group,
+    year: 0,
+    delta: 0,
+    doubles: false,
+    nowMin: min,
+    nowMax: max,
+  };
+}
+
 function mapLcsdRecord(rec) {
   const mapped = storedAgeInfo(rec) || mappedFromAgeMap(rec) || resolveLcsdGroup(rec.group, schemeForRecord(rec));
   if (!mapped) return null;
@@ -904,27 +978,26 @@ function mapLcsdRecord(rec) {
   const nowMin = mapped.min + delta;
   const nowMax = mapped.max === OPEN ? OPEN : mapped.max + delta;
   const band = bandFromEstimatedAge(nowMin, nowMax);
-  if (!band) return null;
+  if (!Number.isFinite(nowMin)) return null;
   return {
     band,
     code: mapped.code,
     year,
     delta,
-    doubles: Boolean(mapped.doubles),
+    doubles: isDoublesGroup(mapped.code, mapped.doubles),
+    nowMin,
+    nowMax,
   };
 }
 
 function pickMappedAge(rows) {
-  let best = null;
-  for (const row of rows) {
-    if (!row?.band) continue;
-    if (!best || recYear({ year: row.year }) > recYear({ year: best.year })) {
-      best = row;
-      continue;
-    }
-    if (row.year === best.year && ageRank(row.band) < ageRank(best.band)) best = row;
-  }
-  return best;
+  const valid = rows.filter((row) => row && (row.band || Number.isFinite(row.nowMin)));
+  if (!valid.length) return null;
+  return [...valid].sort((a, b) => {
+    const year = recYear({ year: b.year }) - recYear({ year: a.year });
+    if (year) return year;
+    return ageRowSpan(a) - ageRowSpan(b);
+  })[0];
 }
 
 function lcsdAgeFromItem(item) {
@@ -932,7 +1005,7 @@ function lcsdAgeFromItem(item) {
   const mapped = records.map(mapLcsdRecord).filter(Boolean);
   const singles = mapped.filter((row) => !row.doubles);
   const doubles = mapped.filter((row) => row.doubles);
-  return pickMappedAge(singles) || pickMappedAge(doubles) || {
+  return mergeAgeRows(singles) || mergeAgeRows(doubles) || {
     band: "",
     code: "",
     year: 0,
@@ -942,32 +1015,38 @@ function lcsdAgeFromItem(item) {
 }
 
 function recordedAgeBand(item) {
+  const hktta = hkttaAgeRow(item);
+  if (hktta) return { id: hktta.band, estimated: false, lcsd: hktta };
   const lcsd = lcsdAgeFromItem(item);
-  if (lcsd.band) return { id: lcsd.band, estimated: false, lcsd };
-  const youth = (item.matches || []).find((p) => HKTTA_AGE[p.age?.youngestGroup]);
-  const hktta = HKTTA_AGE[youth?.age?.youngestGroup] || "";
-  if (hktta) return { id: hktta, estimated: false, lcsd };
+  if (Number.isFinite(lcsd.nowMin) || lcsd.band) {
+    const fine = fineBandContaining(lcsd.nowMin, lcsd.nowMax);
+    return { id: fine?.id || lcsd.band || "", estimated: false, lcsd };
+  }
   return { id: "", estimated: false, lcsd };
 }
 
 function resolvedAge(item) {
   const recorded = recordedAgeBand(item);
-  if (recorded.id) {
-    const band = AGE_BANDS.find((b) => b.id === recorded.id);
+  const lcsd = recorded.lcsd;
+  if (Number.isFinite(lcsd?.nowMin) || recorded.id) {
+    const min = Number.isFinite(lcsd?.nowMin) ? lcsd.nowMin : AGE_BANDS.find((b) => b.id === recorded.id)?.min;
+    const max = lcsd && "nowMax" in lcsd ? lcsd.nowMax : AGE_BANDS.find((b) => b.id === recorded.id)?.max;
+    const fine = fineBandContaining(min, max) || AGE_BANDS.find((b) => b.id === recorded.id);
+    const ids = overlappingFineIds(min, max);
     return {
       estimated: false,
-      id: recorded.id,
-      ids: [recorded.id],
-      min: band?.min,
-      max: band?.max,
-      label: band?.label || recorded.id,
-      lcsd: recorded.lcsd,
+      id: fine?.id || recorded.id,
+      ids: ids.length ? ids : recorded.id ? [recorded.id] : [],
+      min,
+      max,
+      label: fine?.label || (Number.isFinite(min) ? formatAgeRange(min, max) : recorded.id),
+      lcsd,
     };
   }
   if (!guessGenderEnabled()) return null;
   const guessed = estimateAge(item);
   if (!guessed) return null;
-  return { ...guessed, lcsd: recorded.lcsd };
+  return { ...guessed, lcsd };
 }
 
 function ageBandIds(item) {

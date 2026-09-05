@@ -175,7 +175,8 @@ def extract_group_ages(text: str) -> dict[str, dict]:
         key = (code or "").upper()
         if not key or key in out:
             return
-        out[key] = {"ageMin": min_age, "ageMax": max_age, "doubles": doubles}
+        doubles_code = bool(re.match(r"^[MF]([KLM]|D[SAYBC])$", key))
+        out[key] = {"ageMin": min_age, "ageMax": max_age, "doubles": doubles or doubles_code}
 
     def scan(chunk: str) -> None:
         compact = re.sub(r"\s+", "", chunk)
