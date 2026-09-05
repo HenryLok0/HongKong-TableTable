@@ -604,6 +604,14 @@ button.ghost {
   font-size: 12px;
 }
 
+.grid > div > .rank-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .grid div b {
   color: var(--ink);
 }

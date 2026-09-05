@@ -536,28 +536,8 @@ function buildScoredRanks() {
   }
 }
 
-function formatRank(player) {
-  const all = overall(player);
-  if (!all) return "今期總榜未見";
-  const label = player.gender === "F" ? "女子" : "男子";
-  const points = playerPoints(player);
-  const move = rankMoveText(all.rank, all.prev);
-  if (points < 1) {
-    return `${label}官方第 ${all.rank}${move}（0分，不計入有積分排名）`;
-  }
-  const rank = player.scoredRank || all.rank;
-  const total = player.scoredTotal;
-  if (!total) return `${label}第 ${rank}${move}`;
-  const pct = Math.max(0, Math.round((1 - rank / total) * 1000) / 10);
-  return `${label}第 ${rank} / ${total}${move}（約高於 ${pct}% 有積分球員）`;
-}
-
-function rankMoveText(now, prev) {
-  if (typeof now !== "number" || typeof prev !== "number") return "";
-  const diff = prev - now;
-  if (diff > 0) return `（↑${diff}）`;
-  if (diff < 0) return `（↓${Math.abs(diff)}）`;
-  return "（→）";
+function priorAll(player) {
+  return snapshot.prior?.all?.[`${player.gender}|${player.name}|${player.club || ""}|${player.school || ""}`] || null;
 }
 
 function rankMoveClass(now, prev) {
@@ -568,36 +548,42 @@ function rankMoveClass(now, prev) {
   return "delta-same";
 }
 
-function priorAll(player) {
-  return snapshot.prior?.all?.[`${player.gender}|${player.name}|${player.club || ""}|${player.school || ""}`] || null;
+function rankDeltaHtml(now, prev) {
+  if (typeof now !== "number" || typeof prev !== "number") return "";
+  const diff = prev - now;
+  const cls = rankMoveClass(now, prev);
+  const label = diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "持平";
+  return ` <span class="${cls}">${label}</span><span class="muted">（上期第 ${prev}）</span>`;
 }
 
-function changeCell(player) {
-  const all = overall(player);
-  let rankMove = "";
-  let rankPrev = "";
-  if (all && typeof all.rank === "number" && typeof all.prev === "number") {
-    const diff = all.prev - all.rank;
-    const cls = rankMoveClass(all.rank, all.prev);
-    const label = diff > 0 ? `排名 ↑${diff}` : diff < 0 ? `排名 ↓${Math.abs(diff)}` : "排名 →";
-    rankMove = `<span class="${cls}">${label}</span>`;
-    rankPrev = `<span class="muted">上期第 ${all.prev}</span>`;
-  }
+function pointsDeltaHtml(player) {
+  const nowPts = player.points ?? overall(player)?.points;
   const prior = priorAll(player);
-  const nowPts = player.points ?? all?.points;
-  let ptsMove = "";
-  let ptsPrev = "";
-  if (prior && typeof prior.points === "number" && typeof nowPts === "number") {
-    const diff = nowPts - prior.points;
-    const cls = diff > 0 ? "delta-up" : diff < 0 ? "delta-down" : "delta-same";
-    const label = diff > 0 ? `積分 +${diff}` : diff < 0 ? `積分 ${diff}` : "積分 →";
-    ptsMove = `<span class="${cls}">${label}</span>`;
-    ptsPrev = `<span class="muted">上期 ${prior.points}</span>`;
+  if (!prior || typeof prior.points !== "number" || typeof nowPts !== "number") return "";
+  const diff = nowPts - prior.points;
+  const cls = diff > 0 ? "delta-up" : diff < 0 ? "delta-down" : "delta-same";
+  const label = diff > 0 ? `+${diff}` : diff < 0 ? String(diff) : "持平";
+  return ` <span class="${cls}">${label}</span><span class="muted">（上期 ${prior.points}）</span>`;
+}
+
+function formatPointsCell(player) {
+  const pts = player.points ?? overall(player)?.points;
+  return `<b>${pts == null ? "—" : pts}${pointsDeltaHtml(player)}</b>`;
+}
+
+function formatRankCell(player) {
+  const all = overall(player);
+  if (!all) return "<b>今期總榜未見</b>";
+  const label = player.gender === "F" ? "女子" : "男子";
+  const points = playerPoints(player);
+  let note = "";
+  if (points < 1) {
+    note = `<span class="rank-note">0分，不計入有積分排名</span>`;
+  } else if (player.scoredRank && player.scoredTotal) {
+    const pct = Math.max(0, Math.round((1 - player.scoredRank / player.scoredTotal) * 1000) / 10);
+    note = `<span class="rank-note">有積分第 ${player.scoredRank} / ${player.scoredTotal}（約高於 ${pct}%）</span>`;
   }
-  if (!rankMove && !ptsMove) return "";
-  const line1 = rankMove && ptsMove ? `${rankMove} (${ptsMove})` : rankMove || ptsMove;
-  const line2 = rankPrev && ptsPrev ? `${rankPrev} (${ptsPrev})` : rankPrev || ptsPrev;
-  return `<div><span>上期升跌</span><b>${line1}${line2 ? `<br>${line2}` : ""}</b></div>`;
+  return `<b>${label}官方第 ${all.rank}${rankDeltaHtml(all.rank, all.prev)}</b>${note}`;
 }
 
 function levelText(player) {
@@ -900,11 +886,15 @@ function rankChips(player) {
     .map((g) => {
       const row = player.rankings[g];
       const label = g === "ALL" ? "全港" : g;
-      const move = rankMoveText(row.rank, row.prev);
-      const cls = rankMoveClass(row.rank, row.prev);
-      return `<span class="rank-chip">${label} 第 ${row.rank}${
-        move ? `<span class="${cls}">${move}</span>` : ""
-      }${row.points != null ? ` · ${row.points}分` : ""}</span>`;
+      const now = row.rank;
+      const prev = row.prev;
+      let move = "";
+      if (typeof now === "number" && typeof prev === "number") {
+        const diff = prev - now;
+        if (diff > 0) move = `<span class="delta-up"> ↑${diff}</span>`;
+        else if (diff < 0) move = `<span class="delta-down"> ↓${Math.abs(diff)}</span>`;
+      }
+      return `<span class="rank-chip">${label} 第 ${row.rank}${move}${row.points != null ? ` · ${row.points}分` : ""}</span>`;
     })
     .join("");
 }
@@ -1043,7 +1033,6 @@ function renderCard(item, totals, orderLabel) {
 
   return item.matches
     .map((player, idx) => {
-      const all = overall(player);
       const sameName = item.matches.length > 1 ? `<p>找到 ${item.matches.length} 個同名紀錄，呢張係第 ${idx + 1} 個。</p>` : "";
       return `<article class="card">
         <div class="card-top">
@@ -1058,9 +1047,8 @@ function renderCard(item, totals, orderLabel) {
         </div>
         ${sameName}
         <div class="grid">
-          <div><span>乒總積分</span><b>${player.points ?? all?.points ?? "—"}</b></div>
-          <div><span>全港排名</span><b>${formatRank(player)}</b></div>
-          ${changeCell(player)}
+          <div><span>乒總積分</span>${formatPointsCell(player)}</div>
+          <div><span>全港排名</span>${formatRankCell(player)}</div>
           <div><span>教練／球會／學校</span><b>${escapeHtml([player.coach, player.club, player.school].filter(Boolean).join(" · ") || "榜上未列")}</b></div>
         </div>
         <p>${levelText(player)}</p>
@@ -1078,7 +1066,6 @@ function renderPossibleCards(item) {
   if (item.matches.length || !possible.length) return "";
   const cards = possible.map((player) => {
     const fake = { query: player.name, matches: [player], lcsd: [], badges: [] };
-    const all = overall(player);
     const division = hkttaDivision(player) || "none";
     return `<article class="card possible">
       <div class="card-top">
@@ -1091,8 +1078,8 @@ function renderPossibleCards(item) {
       </div>
       <p>乒總榜上有包含「${escapeHtml(item.query)}」嘅姓名，唔會計入上面名單統計。</p>
       <div class="grid">
-        <div><span>乒總積分</span><b>${player.points ?? all?.points ?? "—"}</b></div>
-        <div><span>全港排名</span><b>${formatRank(player)}</b></div>
+        <div><span>乒總積分</span>${formatPointsCell(player)}</div>
+        <div><span>全港排名</span>${formatRankCell(player)}</div>
       </div>
     </article>`;
   }).join("");
@@ -1449,14 +1436,14 @@ function exportMove(item) {
   let rank = "";
   if (all && typeof all.rank === "number" && typeof all.prev === "number") {
     const diff = all.prev - all.rank;
-    rank = diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "→";
+    rank = diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "持平";
   }
   const prior = priorAll(player);
   const nowPts = player.points ?? all?.points;
   let points = "";
   if (prior && typeof prior.points === "number" && typeof nowPts === "number") {
     const diff = nowPts - prior.points;
-    points = diff > 0 ? `+${diff}` : diff < 0 ? String(diff) : "→";
+    points = diff > 0 ? `+${diff}` : diff < 0 ? String(diff) : "持平";
   }
   return { rank, points };
 }
