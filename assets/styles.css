@@ -612,8 +612,7 @@ button.ghost {
   margin-top: 12px;
 }
 
-.lcsd-box span,
-.lcsd-box summary {
+.lcsd-box > span {
   display: block;
   font-size: 12px;
   color: var(--muted);
@@ -621,6 +620,13 @@ button.ghost {
 
 .lcsd-box summary {
   cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  list-style-position: outside;
+}
+
+.lcsd-box .past-delta {
+  white-space: nowrap;
 }
 
 .lcsd-box ul {
@@ -774,11 +780,19 @@ button.ghost {
 }
 
 .delta-up {
-  color: var(--ok);
+  color: #188038;
 }
 
 .delta-down {
-  color: var(--miss);
+  color: #c5221f;
+}
+
+[data-theme="dark"] .delta-up {
+  color: #3dd68c;
+}
+
+[data-theme="dark"] .delta-down {
+  color: #ff6b6b;
 }
 
 .delta-same,

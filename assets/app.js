@@ -951,7 +951,7 @@ function pastPeriodDeltaHtml(row, prev) {
       ? `<span class="delta-up">↑ ${diff}名</span>`
       : `<span class="delta-down">↓ ${Math.abs(diff)}名</span>`);
   }
-  return bits.length ? ` (${bits.join(" · ")})` : "";
+  return bits.length ? ` <span class="past-delta">(${bits.join(" · ")})</span>` : "";
 }
 
 function renderHkttaPast(rows, open = false) {
