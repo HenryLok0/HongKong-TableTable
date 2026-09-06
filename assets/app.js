@@ -936,10 +936,29 @@ function pastHeadlineRows(rows) {
   return [...byKey.values()].sort((a, b) => String(b.period).localeCompare(String(a.period)));
 }
 
+function pastPeriodDeltaHtml(row, prev) {
+  if (!prev) return "";
+  const bits = [];
+  if (typeof row.points === "number" && typeof prev.points === "number" && row.points !== prev.points) {
+    const diff = row.points - prev.points;
+    bits.push(diff > 0
+      ? `<span class="delta-up">↑ ${diff}分</span>`
+      : `<span class="delta-down">↓ ${Math.abs(diff)}分</span>`);
+  }
+  if (typeof row.rank === "number" && typeof prev.rank === "number" && row.rank !== prev.rank) {
+    const diff = prev.rank - row.rank;
+    bits.push(diff > 0
+      ? `<span class="delta-up">↑ ${diff}名</span>`
+      : `<span class="delta-down">↓ ${Math.abs(diff)}名</span>`);
+  }
+  return bits.length ? ` (${bits.join(" · ")})` : "";
+}
+
 function renderHkttaPast(rows, open = false) {
   if (!rows.length) return "";
   const headline = pastHeadlineRows(rows);
-  const items = headline.map((r) => {
+  const items = headline.map((r, idx) => {
+    const prev = headline.slice(idx + 1).find((row) => !r.gender || !row.gender || row.gender === r.gender);
     const bits = [
       r.period,
       r.gender === "F" ? "女子" : r.gender === "M" ? "男子" : "",
@@ -947,7 +966,7 @@ function renderHkttaPast(rows, open = false) {
       r.rank != null ? `第${r.rank}` : "",
       r.points != null ? `${r.points}分` : "",
     ].filter(Boolean);
-    return `<li>${escapeHtml(bits.join(" · "))}</li>`;
+    return `<li>${escapeHtml(bits.join(" · "))}${pastPeriodDeltaHtml(r, prev)}</li>`;
   }).join("");
   const periods = headline.map((r) => r.period).filter(Boolean);
   const span = periods.length > 1 ? `${periods[periods.length - 1]} 至 ${periods[0]}` : (periods[0] || "");
