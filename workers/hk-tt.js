@@ -974,6 +974,10 @@ async function proxy(request) {
     },
     redirect: "follow",
   });
+  const path = incoming.pathname;
+  if (res.status === 404 && !path.startsWith("/api/") && !path.startsWith("/assets/")) {
+    return Response.redirect(`${SITE_ORIGIN}/`, 302);
+  }
   const type = res.headers.get("content-type") || "";
   if (request.method !== "GET" || !type.includes("text/html")) return res;
   let html = await res.text();
