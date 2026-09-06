@@ -2078,6 +2078,7 @@ function renderDataMeta() {
       <div class="stat"><span>不重複</span><div class="stat-num"><b>${uniqueCount}</b>${deltaHtml(uniqueCount, uniquePrev)}</div></div>
     </div>
     ${stamp ? `<p class="hint data-meta-updated">資料更新 ${escapeHtml(stamp)}</p>` : ""}
+    <p class="hint">查詢會一併對照過往乒總榜同 2016 年起嘅章別考試。</p>
   `;
 }
 
