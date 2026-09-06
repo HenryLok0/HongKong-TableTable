@@ -2,7 +2,10 @@ name: Update ranking data
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "30 12 * * *"
+      timezone: Asia/Hong_Kong
+    - cron: "30 0 * * *"
+      timezone: Asia/Hong_Kong
   workflow_dispatch:
 
 concurrency:
