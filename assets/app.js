@@ -558,6 +558,39 @@ function recordNameAge(name, band) {
   bumpGivenAge(givenNameChars(name).join(""), band);
 }
 
+function applyNameStats(data) {
+  nameStats = {
+    gender: new Map(),
+    givenAge: new Map(),
+    bandN: new Map(),
+  };
+  if (!data) return;
+  for (const [ch, row] of Object.entries(data.gender || {})) {
+    nameStats.gender.set(ch, { M: Number(row.M) || 0, F: Number(row.F) || 0 });
+  }
+  for (const [given, bands] of Object.entries(data.givenAge || {})) {
+    const map = new Map();
+    for (const [band, n] of Object.entries(bands || {})) map.set(band, Number(n) || 0);
+    nameStats.givenAge.set(given, map);
+  }
+  for (const [band, n] of Object.entries(data.bandN || {})) {
+    nameStats.bandN.set(band, Number(n) || 0);
+  }
+}
+
+async function loadNameStats() {
+  try {
+    const res = await fetch(dataUrl("name_stats.json"));
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || typeof data !== "object") return false;
+    applyNameStats(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function buildNameStats() {
   nameStats = {
     gender: new Map(),
@@ -2135,7 +2168,7 @@ async function bootLocal(shared) {
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
     if (histRes.ok) hkttaHistory = await histRes.json();
     indexLcsdDocCodes();
-    buildNameStats();
+    if (!(await loadNameStats())) buildNameStats();
     renderDataMeta();
     if (lastResults.length) {
       lastResults = lastResults.map((item) => ({
@@ -2161,13 +2194,11 @@ async function boot() {
   }
   edgeLookup = await detectEdgeLookup();
   if (edgeLookup) {
-    fetch(dataUrl("lcsd_age_maps.json"))
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) lcsdAgeMaps = data;
-        if (lastResults.length) renderResults();
-      })
-      .catch(() => {});
+    const [ageMaps] = await Promise.all([
+      fetch(dataUrl("lcsd_age_maps.json")).then((res) => (res.ok ? res.json() : null)).catch(() => null),
+      loadNameStats(),
+    ]);
+    if (ageMaps) lcsdAgeMaps = ageMaps;
     renderDataMeta();
     bindUi();
     if (shared.length) await runSearch();

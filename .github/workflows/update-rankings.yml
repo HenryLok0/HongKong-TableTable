@@ -38,11 +38,13 @@ jobs:
         continue-on-error: true
       - name: Stamp unique name counts
         run: python scripts/stamp_unique_counts.py
+      - name: Stamp name gender and age stats
+        run: python scripts/stamp_name_stats.py
       - name: Commit snapshot if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/rankings.json data/lcsd.json data/lcsd_age_maps.json data/badges.json data/source_history.json data/hktta_history.json data/lcsd_extra_urls.json data/archive_state.json data/badge_miss_urls.json
+          git add data/rankings.json data/lcsd.json data/lcsd_age_maps.json data/badges.json data/source_history.json data/hktta_history.json data/lcsd_extra_urls.json data/archive_state.json data/badge_miss_urls.json data/name_stats.json
           if git diff --staged --quiet; then
             echo "No data changes"
             exit 0
