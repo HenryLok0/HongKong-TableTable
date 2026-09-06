@@ -2,10 +2,9 @@ name: Update ranking data
 
 on:
   schedule:
-    - cron: "30 12 * * *"
-      timezone: Asia/Hong_Kong
-    - cron: "30 0 * * *"
-      timezone: Asia/Hong_Kong
+    # GitHub Actions cron is UTC only. HKT is UTC+8 year-round.
+    - cron: "30 4 * * *"
+    - cron: "30 16 * * *"
   workflow_dispatch:
 
 concurrency:
