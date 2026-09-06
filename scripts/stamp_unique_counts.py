@@ -16,6 +16,14 @@ HKT = timezone(timedelta(hours=8))
 HISTORY_LIMIT = 90
 
 
+def current_year() -> str:
+    return str(datetime.now(HKT).year)
+
+
+def badge_in_year(recs: object, year: str) -> bool:
+    return any(str(rec.get("session") or "").startswith(year) for rec in (recs or []))
+
+
 def norm(name: object) -> str:
     return re.sub(r"\s+", "", str(name or ""))
 
@@ -34,6 +42,18 @@ def player_count(path: Path, listed: bool) -> int:
     return len(players)
 
 
+def badge_year_names() -> set[str]:
+    keys: set[str] = set()
+    if not BADGES.exists():
+        return keys
+    year = current_year()
+    for name, recs in (load(BADGES).get("players") or {}).items():
+        key = norm(name)
+        if key and badge_in_year(recs, year):
+            keys.add(key)
+    return keys
+
+
 def unique_names() -> int:
     keys: set[str] = set()
     rankings = load(RANKINGS)
@@ -46,11 +66,7 @@ def unique_names() -> int:
             key = norm(name)
             if key:
                 keys.add(key)
-    if BADGES.exists():
-        for name in load(BADGES).get("players") or {}:
-            key = norm(name)
-            if key:
-                keys.add(key)
+    keys.update(badge_year_names())
     return len(keys)
 
 
@@ -67,11 +83,12 @@ def latest_source_time() -> str:
 
 def current_snapshot() -> dict:
     unique = unique_names()
+    year_badges = len(badge_year_names())
     return {
         "at": latest_source_time(),
         "hktta": player_count(RANKINGS, True),
         "lcsd": player_count(LCSD, False),
-        "badges": player_count(BADGES, False),
+        "badges": year_badges,
         "unique": unique,
     }
 
@@ -85,6 +102,8 @@ def write_history(snap: dict) -> None:
             hist = {"snapshots": []}
     snaps = list(hist.get("snapshots") or [])
     prev = snaps[-1] if snaps else None
+    if switched_from_archive_badges(snap, prev):
+        prev = None
     if prev:
         snap["prev"] = {
             "hktta": prev.get("hktta"),
@@ -119,10 +138,50 @@ def stamp_unique(snap: dict) -> None:
         prev = rankings.get("uniqueCount")
     if prev is None:
         prev = snap["unique"]
+    last = last_snapshot()
+    if switched_from_archive_badges(snap, last):
+        prev = snap["unique"]
+        last = None
     rankings["uniqueCount"] = snap["unique"]
     rankings["uniquePrev"] = prev
     RANKINGS.write_text(json.dumps(rankings, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    if BADGES.exists():
+        badges = load(BADGES)
+        badge_prev = (last or {}).get("badges")
+        badges["countAll"] = archive_name_count(BADGES)
+        badges["count"] = snap["badges"]
+        badges["prevCount"] = badge_prev if badge_prev is not None else snap["badges"]
+        badges["countYear"] = current_year()
+        BADGES.write_text(json.dumps(badges, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
+
+def archive_name_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return len(load(path).get("players") or {})
+
+
+def last_snapshot() -> dict | None:
+    if not HISTORY.exists():
+        return None
+    try:
+        snaps = load(HISTORY).get("snapshots") or []
+    except (OSError, json.JSONDecodeError):
+        return None
+    return snaps[-1] if snaps else None
+
+
+def switched_from_archive_badges(snap: dict, last: dict | None) -> bool:
+    if not last:
+        return False
+    all_badges = archive_name_count(BADGES)
+    prev_badges = last.get("badges")
+    return (
+        isinstance(prev_badges, int)
+        and all_badges > 0
+        and prev_badges == all_badges
+        and snap["badges"] < all_badges
+    )
 
 def main() -> None:
     snap = current_snapshot()

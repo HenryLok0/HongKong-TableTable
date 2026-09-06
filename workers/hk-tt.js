@@ -11,6 +11,19 @@ function normalizeName(name) {
   return String(name).replace(/\s+/g, "");
 }
 
+function currentHktYear() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Hong_Kong",
+    year: "numeric",
+  }).formatToParts(new Date());
+  return parts.find((part) => part.type === "year")?.value || String(new Date().getFullYear());
+}
+
+function badgeInYear(recs, year) {
+  const prefix = String(year);
+  return (recs || []).some((rec) => String(rec.session || "").startsWith(prefix));
+}
+
 function playerPoints(player) {
   return player.points ?? player.rankings?.ALL?.points ?? 0;
 }
@@ -901,11 +914,16 @@ async function buildIndex(ctx) {
     unique.add(key);
     lcsdByName.set(key, recs);
   }
+  const year = currentHktYear();
+  let badgeYearCount = 0;
   const badgeByName = new Map();
   for (const [name, recs] of Object.entries(badgePlayers)) {
     const key = normalizeName(name) || name;
-    unique.add(key);
     badgeByName.set(key, recs);
+    if (badgeInYear(recs, year)) {
+      unique.add(key);
+      badgeYearCount += 1;
+    }
   }
 
   const hkttaPastByName = new Map();
@@ -933,7 +951,7 @@ async function buildIndex(ctx) {
     priorAll: rankings.prior?.all || {},
     hktta: players.length,
     lcsd: Object.keys(lcsdPlayers).length,
-    badges: Object.keys(badgePlayers).length,
+    badges: badgeYearCount,
     unique: unique.size,
     hkttaPrev: rankings.prevCount,
     lcsdPrev: lcsd.prevCount,

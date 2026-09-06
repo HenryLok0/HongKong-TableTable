@@ -2004,9 +2004,23 @@ function deltaHtml(current, prev) {
   return `<span class="stat-delta ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${Math.abs(diff)}</span>`;
 }
 
+function currentHktYear() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Hong_Kong",
+    year: "numeric",
+  }).formatToParts(new Date());
+  return parts.find((part) => part.type === "year")?.value || String(new Date().getFullYear());
+}
+
+function badgeInYear(recs, year) {
+  const prefix = String(year);
+  return (recs || []).some((rec) => String(rec.session || "").startsWith(prefix));
+}
+
 function uniqueSourceNameCount() {
   if (sourceMeta && Number.isFinite(sourceMeta.unique)) return sourceMeta.unique;
   const keys = new Set();
+  const year = currentHktYear();
   for (const player of snapshot.players || []) {
     const key = normalizeName(player.name);
     if (key) keys.add(key);
@@ -2015,11 +2029,20 @@ function uniqueSourceNameCount() {
     const key = normalizeName(name);
     if (key) keys.add(key);
   }
-  for (const name of Object.keys(badgeIndex.players || {})) {
+  for (const [name, recs] of Object.entries(badgeIndex.players || {})) {
     const key = normalizeName(name);
-    if (key) keys.add(key);
+    if (key && badgeInYear(recs, year)) keys.add(key);
   }
   return keys.size;
+}
+
+function currentYearBadgeCount() {
+  const year = currentHktYear();
+  let n = 0;
+  for (const recs of Object.values(badgeIndex.players || {})) {
+    if (badgeInYear(recs, year)) n += 1;
+  }
+  return n;
 }
 
 function formatPeriod(period) {
@@ -2036,7 +2059,7 @@ function renderDataMeta() {
   if (!meta) return;
   const hkttaCount = sourceMeta?.hktta ?? snapshot.players.length;
   const lcsdCount = sourceMeta?.lcsd ?? Object.keys(lcsdIndex.players || {}).length;
-  const badgeCount = sourceMeta?.badges ?? Object.keys(badgeIndex.players || {}).length;
+  const badgeCount = sourceMeta?.badges ?? currentYearBadgeCount();
   const uniqueCount = uniqueSourceNameCount();
   const hkttaAt = sourceMeta?.updated || snapshot.updated || "";
   const lcsdAt = sourceMeta?.lcsdUpdated || lcsdIndex.updated || "";
@@ -2050,8 +2073,8 @@ function renderDataMeta() {
   meta.innerHTML = `
     <div class="data-meta-grid">
       <div class="stat"><span>乒總</span><div class="stat-num"><b>${hkttaCount}</b>${deltaHtml(hkttaCount, hkttaPrev)}</div>${period ? `<span class="stat-sub">${escapeHtml(period)}</span>` : ""}</div>
-      <div class="stat"><span>康文署</span><div class="stat-num"><b>${lcsdCount}</b>${deltaHtml(lcsdCount, lcsdPrev)}</div></div>
-      <div class="stat"><span>恒生章別</span><div class="stat-num"><b>${badgeCount}</b>${deltaHtml(badgeCount, badgePrev)}</div></div>
+      <div class="stat"><span>康文署（已收錄地區賽）</span><div class="stat-num"><b>${lcsdCount}</b>${deltaHtml(lcsdCount, lcsdPrev)}</div></div>
+      <div class="stat"><span>恒生章別（本年公開考試）</span><div class="stat-num"><b>${badgeCount}</b>${deltaHtml(badgeCount, badgePrev)}</div></div>
       <div class="stat"><span>不重複</span><div class="stat-num"><b>${uniqueCount}</b>${deltaHtml(uniqueCount, uniquePrev)}</div></div>
     </div>
     ${stamp ? `<p class="hint data-meta-updated">資料更新 ${escapeHtml(stamp)}</p>` : ""}
