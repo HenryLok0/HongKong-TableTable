@@ -97,7 +97,8 @@ function clientMeta(request) {
   if (cf.country) out.country = String(cf.country);
   if (cf.city) out.city = String(cf.city).slice(0, 40);
   if (cf.region) out.region = String(cf.region).slice(0, 40);
-  const district = hkDistrict(out.country, out.city, out.region);
+  const district = hkDistrict(out.country, out.city, out.region)
+    || nearestHkDistrict(out.country, cf.latitude, cf.longitude);
   if (district) out.district = district;
   if (cf.asOrganization) out.org = String(cf.asOrganization).slice(0, 48);
   if (cf.asn) out.asn = String(cf.asn);
@@ -167,6 +168,44 @@ const HK_DISTRICTS = [
   ["葵青區", ["葵青", "kwaitsing", "kwaichung", "tsingyi", "葵涌", "青衣"]],
   ["離島區", ["離島", "islands", "tungchung", "cheungchau", "lantau", "discoverybay", "muiwo", "pengchau", "東涌", "長洲", "大嶼山", "愉景灣", "梅窩", "坪洲"]],
 ];
+
+function nearestHkDistrict(country, lat, lon) {
+  if (String(country || "").toUpperCase() !== "HK") return "";
+  const y = Number(lat);
+  const x = Number(lon);
+  if (!Number.isFinite(y) || !Number.isFinite(x)) return "";
+  if (y < 22.12 || y > 22.58 || x < 113.75 || x > 114.52) return "";
+  const points = [
+    ["中西區", 22.282, 114.150],
+    ["灣仔區", 22.279, 114.173],
+    ["東區", 22.284, 114.224],
+    ["南區", 22.247, 114.159],
+    ["油尖旺區", 22.312, 114.170],
+    ["深水埗區", 22.331, 114.162],
+    ["九龍城區", 22.330, 114.191],
+    ["黃大仙區", 22.342, 114.194],
+    ["觀塘區", 22.313, 114.225],
+    ["葵青區", 22.354, 114.128],
+    ["荃灣區", 22.371, 114.114],
+    ["屯門區", 22.391, 113.976],
+    ["元朗區", 22.444, 114.022],
+    ["北區", 22.494, 114.138],
+    ["大埔區", 22.451, 114.169],
+    ["沙田區", 22.383, 114.188],
+    ["西貢區", 22.382, 114.273],
+    ["離島區", 22.289, 113.941],
+  ];
+  let best = "";
+  let bestD = Infinity;
+  for (const [name, py, px] of points) {
+    const d = (y - py) ** 2 + (x - px) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = name;
+    }
+  }
+  return best;
+}
 
 function hkDistrict(country, city, region) {
   if (String(country || "").toUpperCase() !== "HK") return "";
@@ -927,7 +966,7 @@ async function proxy(request) {
   const rel = incoming.pathname.replace(/^\//, "");
   const target = new URL(rel, GITHUB_BASE);
   target.search = incoming.search;
-  return fetch(target.href, {
+  const res = await fetch(target.href, {
     method: request.method,
     headers: {
       "User-Agent": "hk-tt-worker",
@@ -935,6 +974,16 @@ async function proxy(request) {
     },
     redirect: "follow",
   });
+  const type = res.headers.get("content-type") || "";
+  if (request.method !== "GET" || !type.includes("text/html")) return res;
+  let html = await res.text();
+  html = html.replace(/<meta\s+name=["']robots["'][^>]*>/gi, "");
+  html = html.replace(/<script>\s*if\s*\(\/github\\.io\$\/i[\s\S]*?<\/script>/i, "");
+  html = html.replace("</head>", `  <meta name="robots" content="index, follow" />\n</head>`);
+  const headers = new Headers(res.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
+  headers.delete("x-robots-tag");
+  return new Response(html, { status: res.status, headers });
 }
 
 export default {
