@@ -6,6 +6,7 @@ const BUCKETS = [
   { id: "hktta-c", label: "乒總丙組" },
   { id: "hktta-d", label: "乒總丁組" },
   { id: "hktta-e", label: "乒總戊組" },
+  { id: "hktta-past", label: "今期未上榜、過往有乒總紀錄" },
   { id: "lcsd-only", label: "只有參加過康文署比賽" },
   { id: "none", label: "完全沒有任何紀錄" },
 ];
@@ -175,9 +176,11 @@ const FILTERS = [
   { group: "bucket", id: "hktta-c", label: "乒總丙組" },
   { group: "bucket", id: "hktta-d", label: "乒總丁組" },
   { group: "bucket", id: "hktta-e", label: "乒總戊組" },
+  { group: "bucket", id: "hktta-past", label: "過往有乒總紀錄" },
   { group: "bucket", id: "lcsd-only", label: "只有康文署比賽" },
   { group: "extra", id: "has-lcsd", label: "有康文署紀錄" },
   { group: "extra", id: "has-badge", label: "有恒生章別紀錄" },
+  { group: "extra", id: "has-hktta-past", label: "有過往乒總榜" },
   { group: "extra", id: "has-coach", label: "教練" },
   { group: "extra", id: "has-club", label: "球會" },
   { group: "extra", id: "has-school", label: "學校" },
@@ -918,24 +921,44 @@ const PAST_GROUP = {
   U21: "U21",
 };
 
-function renderHkttaPast(rows) {
+function pastHeadlineRows(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = `${row.period}|${row.gender || ""}`;
+    const current = byKey.get(key);
+    const preferAll = row.group === "ALL";
+    if (!current) {
+      byKey.set(key, row);
+      continue;
+    }
+    if (preferAll && current.group !== "ALL") byKey.set(key, row);
+  }
+  return [...byKey.values()].sort((a, b) => String(b.period).localeCompare(String(a.period)));
+}
+
+function renderHkttaPast(rows, open = false) {
   if (!rows.length) return "";
-  const items = [...rows]
-    .sort((a, b) => String(b.period).localeCompare(String(a.period)) || String(a.group).localeCompare(String(b.group)))
-    .map((r) => {
-      const bits = [
-        r.period,
-        r.gender === "F" ? "女子" : r.gender === "M" ? "男子" : "",
-        PAST_GROUP[r.group] || r.group,
-        r.rank != null ? `第${r.rank}` : "",
-        r.points != null ? `${r.points}分` : "",
-      ].filter(Boolean);
-      return `<li>${escapeHtml(bits.join(" · "))}</li>`;
-    })
-    .join("");
-  const title = `乒總過往排名榜（${rows.length} 筆）`;
-  if (rows.length > 8) {
+  const headline = pastHeadlineRows(rows);
+  const items = headline.map((r) => {
+    const bits = [
+      r.period,
+      r.gender === "F" ? "女子" : r.gender === "M" ? "男子" : "",
+      PAST_GROUP[r.group] || r.group,
+      r.rank != null ? `第${r.rank}` : "",
+      r.points != null ? `${r.points}分` : "",
+    ].filter(Boolean);
+    return `<li>${escapeHtml(bits.join(" · "))}</li>`;
+  }).join("");
+  const periods = headline.map((r) => r.period).filter(Boolean);
+  const span = periods.length > 1 ? `${periods[periods.length - 1]} 至 ${periods[0]}` : (periods[0] || "");
+  const best = Math.min(...headline.filter((r) => typeof r.rank === "number").map((r) => r.rank));
+  const bestText = Number.isFinite(best) && best !== Infinity ? ` · 總榜最好第${best}` : "";
+  const title = `乒總過往 ${span}（${headline.length} 期${bestText}）`.replace(/\s+/g, " ").trim();
+  if (!open && headline.length > 8) {
     return `<div class="lcsd-box"><details><summary>${escapeHtml(title)}</summary><ul>${items}</ul></details></div>`;
+  }
+  if (open) {
+    return `<div class="lcsd-box"><details open><summary>${escapeHtml(title)}</summary><ul>${items}</ul></details></div>`;
   }
   return `<div class="lcsd-box"><span>${escapeHtml(title)}</span><ul>${items}</ul></div>`;
 }
@@ -954,6 +977,8 @@ function recordedGender(item) {
   if (item.matches[0]?.gender) return item.matches[0].gender;
   const genders = new Set((item.lcsd || []).map(lcsdGenderFromGroup).filter(Boolean));
   if (genders.size === 1) return [...genders][0];
+  const past = new Set((item.hkttaPast || []).map((row) => row.gender).filter((g) => g === "M" || g === "F"));
+  if (past.size === 1) return [...past][0];
   return "";
 }
 
@@ -971,6 +996,7 @@ function classify(item) {
     ranked.sort((a, b) => (overall(a).rank || 9e9) - (overall(b).rank || 9e9));
     return hkttaDivision(ranked[0]);
   }
+  if ((item.hkttaPast || []).length) return "hktta-past";
   if (item.lcsd.length) return "lcsd-only";
   return "none";
 }
@@ -1314,6 +1340,7 @@ function bucketTone(id) {
   if (id === "hktta-c") return "tone-c";
   if (id === "hktta-d") return "tone-d";
   if (id === "hktta-e") return "tone-e";
+  if (id === "hktta-past") return "ok";
   if (id === "none") return "miss";
   return "ok";
 }
@@ -1377,7 +1404,7 @@ function renderCard(item, totals, orderLabel) {
   const bucketText = divisionLabel(bucket);
   const lcsdHtml = renderLcsd(item.lcsd);
   const badgeHtml = renderBadges(item.badges || []);
-  const pastHtml = renderHkttaPast(item.hkttaPast || []);
+  const pastHtml = renderHkttaPast(item.hkttaPast || [], !item.matches.length);
 
   if (!item.matches.length) {
     const hasExtra = item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length;
@@ -1506,6 +1533,13 @@ function compareBadgeStrength(a, b) {
   return String(right.session).localeCompare(String(left.session));
 }
 
+function bestPastRank(item) {
+  const ranks = pastHeadlineRows(item.hkttaPast || [])
+    .map((row) => row.rank)
+    .filter((n) => typeof n === "number");
+  return ranks.length ? Math.min(...ranks) : 9e9;
+}
+
 function compareByListRank(a, b) {
   const tierA = listRankTier(a);
   const tier = tierA - listRankTier(b);
@@ -1516,12 +1550,15 @@ function compareByListRank(a, b) {
     return bestPoints(b.matches) - bestPoints(a.matches);
   }
   if (tierA === 2) {
+    return bestPastRank(a) - bestPastRank(b);
+  }
+  if (tierA === 3) {
     return compareBadgeStrength(
       (a.badges || []).filter((r) => r.passed),
       (b.badges || []).filter((r) => r.passed)
     );
   }
-  if (tierA === 3) {
+  if (tierA === 4) {
     return compareBadgeStrength(a.badges || [], b.badges || []);
   }
   return 0;
@@ -1538,6 +1575,7 @@ function hasHkttaField(item, key) {
 function extraHas(item, id) {
   if (id === "has-lcsd") return Boolean(item.lcsd.length);
   if (id === "has-badge") return Boolean((item.badges || []).length);
+  if (id === "has-hktta-past") return Boolean((item.hkttaPast || []).length);
   if (id === "has-coach") return hasHkttaField(item, "coach");
   if (id === "has-club") return hasHkttaField(item, "club");
   if (id === "has-school") return hasHkttaField(item, "school");
