@@ -54,10 +54,21 @@ def unique_names() -> int:
     return len(keys)
 
 
+def latest_source_time() -> str:
+    times = []
+    for path in (RANKINGS, LCSD, BADGES):
+        if not path.exists():
+            continue
+        text = str(load(path).get("updated") or "").strip()
+        if text:
+            times.append(text)
+    return max(times) if times else datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
+
+
 def current_snapshot() -> dict:
     unique = unique_names()
     return {
-        "at": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
+        "at": latest_source_time(),
         "hktta": player_count(RANKINGS, True),
         "lcsd": player_count(LCSD, False),
         "badges": player_count(BADGES, False),
