@@ -1082,7 +1082,7 @@ async function proxy(request) {
     redirect: "follow",
   });
   const path = incoming.pathname;
-  if (res.status === 404 && !path.startsWith("/api/") && !path.startsWith("/assets/")) {
+  if (res.status === 404 && !path.startsWith("/api/") && !path.startsWith("/assets/") && path !== "/favicon.ico") {
     return Response.redirect(`${SITE_ORIGIN}/`, 302);
   }
   const type = res.headers.get("content-type") || "";
@@ -1101,6 +1101,13 @@ export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
     const path = incoming.pathname;
+
+    if (path === "/favicon.ico") {
+      return proxy(new Request(new URL("/assets/favicon.ico", incoming.origin), request));
+    }
+    if (path === "/apple-touch-icon.png" || path === "/apple-touch-icon-precomposed.png") {
+      return proxy(new Request(new URL("/assets/apple-touch-icon.png", incoming.origin), request));
+    }
 
     if (path === "/robots.txt") {
       const body = [
