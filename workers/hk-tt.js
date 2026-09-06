@@ -487,7 +487,7 @@ function snapshotDelta(now, prev) {
 
 function snapshotsTable(snaps) {
   if (!snaps.length) {
-    return `<p class="empty">未有更新紀錄。撳強制更新，或者等 GitHub 排程跑完再整理。</p>`;
+    return `<p class="empty">未有更新紀錄。等 GitHub 排程跑完，或者去 Actions 撳 Run workflow。</p>`;
   }
   const rows = [...snaps].reverse().map((row, idx) => {
     const prev = row.prev || {};
@@ -519,8 +519,6 @@ async function loadSnapshots() {
   } catch {
     return [];
   }
-}
-
 }
 
 function adminPage(rows, shortCount, snaps) {
