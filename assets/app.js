@@ -45,11 +45,21 @@ const HKTTA_AGE = {
 const HKTTA_AGE_RANGE = {
   U9: { min: 0, max: 9 },
   U11: { min: 10, max: 11 },
+  U12: { min: 10, max: 12 },
   U13: { min: 12, max: 13 },
   U15: { min: 14, max: 15 },
   U17: { min: 16, max: 17 },
+  U18: { min: 16, max: 18 },
   U19: { min: 18, max: 19 },
   U21: { min: 19, max: 21 },
+};
+
+const BADGE_AGE = {
+  b: { min: 6, max: 16 },
+  s: { min: 8, max: 18 },
+  g: { min: 10, max: OPEN },
+  p: { min: 12, max: OPEN },
+  d: { min: 14, max: OPEN },
 };
 
 function ageRange(min, max, doubles = false) {
@@ -1063,6 +1073,15 @@ function recYear(rec) {
   return Number.isFinite(year) ? year : 0;
 }
 
+function periodYear(period) {
+  const match = String(period || "").match(/(20\d{2}|200[4-9])/);
+  return match ? Number(match[1]) : 0;
+}
+
+function sessionYear(session) {
+  return periodYear(session);
+}
+
 function currentYear() {
   return new Date().getFullYear();
 }
@@ -1172,20 +1191,59 @@ function ageRowSpan(row) {
   return top - row.nowMin;
 }
 
-function mergeAgeRows(rows) {
-  if (!rows.length) return null;
-  const nowMin = Math.max(...rows.map((r) => r.nowMin));
-  const caps = rows.map((r) => (r.nowMax === OPEN ? Infinity : r.nowMax));
-  const cap = Math.min(...caps);
-  if (nowMin > cap) return pickMappedAge(rows);
-  const cite = [...rows].sort((a, b) => ageRowSpan(a) - ageRowSpan(b) || b.year - a.year)[0];
-  const nowMax = cap === Infinity ? OPEN : cap;
+function intersectAgeBounds(a, b) {
+  if (!b) return a;
+  if (!a) return { nowMin: b.nowMin, nowMax: b.nowMax };
+  const nowMin = Math.max(a.nowMin, b.nowMin);
+  const capA = a.nowMax === OPEN || a.nowMax == null ? Infinity : a.nowMax;
+  const capB = b.nowMax === OPEN || b.nowMax == null ? Infinity : b.nowMax;
+  const cap = Math.min(capA, capB);
+  if (nowMin > cap) return null;
+  return { nowMin, nowMax: cap === Infinity ? OPEN : cap };
+}
+
+function ageCiteRank(row) {
+  if (row.source === "hktta") return 0;
+  if (row.source === "hktta-past") return 1;
+  if (row.source === "lcsd") return 2;
+  if (row.source === "badge") return 3;
+  return 9;
+}
+
+function greedyIntersectAge(rows, hard = []) {
+  const used = [];
+  let acc = null;
+  for (const row of hard) {
+    const next = intersectAgeBounds(acc, row);
+    if (!next) {
+      if (!acc) {
+        acc = { nowMin: row.nowMin, nowMax: row.nowMax };
+        used.push(row);
+      }
+      continue;
+    }
+    acc = next;
+    used.push(row);
+  }
+  const rest = [...rows].sort((a, b) => ageRowSpan(a) - ageRowSpan(b) || (b.year || 0) - (a.year || 0));
+  for (const row of rest) {
+    const next = intersectAgeBounds(acc, row);
+    if (!next) continue;
+    acc = next;
+    used.push(row);
+  }
+  if (!acc) return null;
+  const cite = [...used].sort((a, b) => ageCiteRank(a) - ageCiteRank(b) || ageRowSpan(a) - ageRowSpan(b) || (b.year || 0) - (a.year || 0))[0];
   return {
     ...cite,
-    nowMin,
-    nowMax,
-    band: bandFromEstimatedAge(nowMin, nowMax),
+    nowMin: acc.nowMin,
+    nowMax: acc.nowMax,
+    band: bandFromEstimatedAge(acc.nowMin, acc.nowMax),
   };
+}
+
+function mergeAgeRows(rows) {
+  return greedyIntersectAge(rows);
 }
 
 function hkttaAgeRow(item) {
@@ -1201,7 +1259,62 @@ function hkttaAgeRow(item) {
     doubles: false,
     nowMin: min,
     nowMax: max,
+    source: "hktta",
   };
+}
+
+function hkttaPastAgeRow(row) {
+  const group = String(row.group || "").toUpperCase();
+  const range = HKTTA_AGE_RANGE[group];
+  if (!range) return null;
+  const year = periodYear(row.period);
+  if (!year) return null;
+  const delta = Math.max(0, currentYear() - year);
+  const nowMin = range.min + delta;
+  const nowMax = range.max === OPEN ? OPEN : range.max + delta;
+  return {
+    band: bandFromEstimatedAge(nowMin, nowMax),
+    code: group,
+    year,
+    delta,
+    doubles: false,
+    nowMin,
+    nowMax,
+    source: "hktta-past",
+    period: row.period,
+  };
+}
+
+function badgeAgeRows(item) {
+  const first = new Map();
+  for (const rec of item.badges || []) {
+    const id = badgeId(rec.badge);
+    if (!BADGE_AGE[id]) continue;
+    const year = sessionYear(rec.session);
+    if (!year) continue;
+    const prev = first.get(id);
+    if (!prev || String(rec.session) < String(prev.session)) first.set(id, rec);
+  }
+  const rows = [];
+  for (const [id, rec] of first) {
+    const bound = BADGE_AGE[id];
+    const year = sessionYear(rec.session);
+    const delta = Math.max(0, currentYear() - year);
+    const useMax = rec.passed && bound.max !== OPEN && (id === "b" || id === "s");
+    const nowMin = bound.min + delta;
+    const nowMax = useMax ? bound.max + delta : OPEN;
+    rows.push({
+      band: bandFromEstimatedAge(nowMin, nowMax),
+      code: rec.badge,
+      year,
+      delta,
+      doubles: false,
+      nowMin,
+      nowMax,
+      source: "badge",
+    });
+  }
+  return rows;
 }
 
 function mapLcsdRecord(rec) {
@@ -1221,25 +1334,19 @@ function mapLcsdRecord(rec) {
     doubles: isDoublesGroup(mapped.code, mapped.doubles),
     nowMin,
     nowMax,
+    source: "lcsd",
   };
 }
 
-function pickMappedAge(rows) {
-  const valid = rows.filter((row) => row && (row.band || Number.isFinite(row.nowMin)));
-  if (!valid.length) return null;
-  return [...valid].sort((a, b) => {
-    const year = recYear({ year: b.year }) - recYear({ year: a.year });
-    if (year) return year;
-    return ageRowSpan(a) - ageRowSpan(b);
-  })[0];
-}
-
-function lcsdAgeFromItem(item) {
+function lcsdAgeRows(item) {
   const records = Array.isArray(item.lcsd) ? item.lcsd : [];
   const mapped = records.map(mapLcsdRecord).filter(Boolean);
   const singles = mapped.filter((row) => !row.doubles);
-  const doubles = mapped.filter((row) => row.doubles);
-  return mergeAgeRows(singles) || mergeAgeRows(doubles) || {
+  return singles.length ? singles : mapped.filter((row) => row.doubles);
+}
+
+function lcsdAgeFromItem(item) {
+  return mergeAgeRows(lcsdAgeRows(item)) || {
     band: "",
     code: "",
     year: 0,
@@ -1248,21 +1355,62 @@ function lcsdAgeFromItem(item) {
   };
 }
 
+function evidenceAge(item) {
+  const hard = [];
+  const current = hkttaAgeRow(item);
+  if (current) hard.push(current);
+  const soft = [
+    ...(item.hkttaPast || []).map(hkttaPastAgeRow).filter(Boolean),
+    ...lcsdAgeRows(item),
+    ...badgeAgeRows(item),
+  ];
+  let merged = greedyIntersectAge(soft, hard);
+  const floor = hkttaAdultFloor(item);
+  if (!floor) return merged;
+  const floorRow = {
+    band: "",
+    code: "",
+    year: 0,
+    delta: 0,
+    doubles: false,
+    nowMin: floor,
+    nowMax: OPEN,
+    source: "floor",
+  };
+  if (!merged) return greedyIntersectAge(soft, [...hard, floorRow]);
+  const clipped = intersectAgeBounds(merged, floorRow);
+  if (clipped) return { ...merged, ...clipped, band: bandFromEstimatedAge(clipped.nowMin, clipped.nowMax) };
+  return greedyIntersectAge(soft, [...hard, floorRow]);
+}
+
+function isRecordedAge(row) {
+  if (!row || !Number.isFinite(row.nowMin)) return false;
+  if (row.source === "floor" || !row.code) return false;
+  if (row.nowMax !== OPEN && Number.isFinite(row.nowMax)) return true;
+  return row.nowMin >= 16;
+}
+
 function recordedAgeBand(item) {
-  const hktta = hkttaAgeRow(item);
-  if (hktta) return { id: hktta.band, estimated: false, lcsd: hktta };
-  const lcsd = lcsdAgeFromItem(item);
-  if (Number.isFinite(lcsd.nowMin) || lcsd.band) {
-    const fine = fineBandContaining(lcsd.nowMin, lcsd.nowMax);
-    return { id: fine?.id || lcsd.band || "", estimated: false, lcsd };
+  const evidence = evidenceAge(item);
+  if (isRecordedAge(evidence)) {
+    const fine = fineBandContaining(evidence.nowMin, evidence.nowMax);
+    return { id: fine?.id || evidence.band || "", estimated: false, lcsd: evidence };
   }
-  return { id: "", estimated: false, lcsd };
+  return { id: "", estimated: false, lcsd: evidence };
+}
+
+function clipGuessedAge(guessed, evidence) {
+  if (!guessed || !evidence || !Number.isFinite(evidence.nowMin)) return guessed;
+  const min = Math.max(guessed.min, evidence.nowMin);
+  const cap = evidence.nowMax === OPEN || evidence.nowMax == null ? guessed.max : Math.min(guessed.max === OPEN ? evidence.nowMax : guessed.max, evidence.nowMax);
+  if (min > (cap === OPEN ? 200 : cap)) return makeAgeGuess(evidence.nowMin, evidence.nowMax);
+  return makeAgeGuess(min, cap);
 }
 
 function resolvedAge(item) {
   const recorded = recordedAgeBand(item);
   const lcsd = recorded.lcsd;
-  if (Number.isFinite(lcsd?.nowMin) || recorded.id) {
+  if (isRecordedAge(lcsd) || recorded.id) {
     const min = Number.isFinite(lcsd?.nowMin) ? lcsd.nowMin : AGE_BANDS.find((b) => b.id === recorded.id)?.min;
     const max = lcsd && "nowMax" in lcsd ? lcsd.nowMax : AGE_BANDS.find((b) => b.id === recorded.id)?.max;
     const fine = fineBandContaining(min, max) || AGE_BANDS.find((b) => b.id === recorded.id);
@@ -1278,7 +1426,7 @@ function resolvedAge(item) {
     };
   }
   if (!guessGenderEnabled()) return null;
-  const guessed = estimateAge(item);
+  const guessed = clipGuessedAge(estimateAge(item), lcsd);
   if (!guessed) return null;
   return { ...guessed, lcsd };
 }
@@ -1297,7 +1445,8 @@ function ageBadge(item) {
   const lcsd = resolved.lcsd;
   if (!lcsd?.code) return `<span class="badge ok">${escapeHtml(resolved.label)}</span>`;
   const bits = [lcsd.code];
-  if (lcsd.year) bits.push(String(lcsd.year));
+  if (lcsd.period) bits.push(String(lcsd.period));
+  else if (lcsd.year) bits.push(String(lcsd.year));
   if (lcsd.delta) bits.push(`+${lcsd.delta}年`);
   return `<span class="badge ok">${escapeHtml(`${resolved.label}（${bits.join(" · ")}）`)}</span>`;
 }
