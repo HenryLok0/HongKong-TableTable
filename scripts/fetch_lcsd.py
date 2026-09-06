@@ -10,7 +10,12 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from archive_http import cdx_prefix, get_pdf  # noqa: E402
+import archive_state  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = ROOT / "data" / "lcsd.json"
@@ -145,22 +150,78 @@ def parse_listing_html(html: str) -> list[dict]:
 
 
 def fetch_listing() -> list[dict]:
-    payload = urllib.parse.urlencode(
-        {
-            "searchFormPath": "/webApp/Dagc",
-            "act": "060",
-            "dist": "ALL",
-            "pageNo": "1",
-            "sortField": "",
-            "sortOrder": "",
-        }
-    ).encode()
-    code, body = http_request(SEARCH_URL, payload)
-    if code != 200:
-        print(f"listing failed ({code})")
-        return []
-    html = body.decode("utf-8", errors="replace")
-    return parse_listing_html(html)
+    events: list[dict] = []
+    seen: set[str] = set()
+    for page_no in range(1, 16):
+        payload = urllib.parse.urlencode(
+            {
+                "searchFormPath": "/webApp/Dagc",
+                "act": "060",
+                "dist": "ALL",
+                "pageNo": str(page_no),
+                "sortField": "",
+                "sortOrder": "",
+            }
+        ).encode()
+        code, body = http_request(SEARCH_URL, payload)
+        if code != 200:
+            print(f"listing failed page {page_no} ({code})")
+            break
+        html = body.decode("utf-8", errors="replace")
+        batch = parse_listing_html(html)
+        fresh = 0
+        for item in batch:
+            if item["url"] in seen:
+                continue
+            seen.add(item["url"])
+            events.append(item)
+            fresh += 1
+        print(f"listing page {page_no}: {fresh} new")
+        if not batch or fresh == 0:
+            break
+    return events
+
+
+TT_URL_RE = re.compile(
+    r"table[-_ ]?tennis|乒乓球|ttn|_tt[._]|/tt_|dagc.*tt",
+    re.I,
+)
+
+
+def guess_lcsd_meta(url: str) -> dict:
+    kind = kind_from_url(url)
+    year_match = YEAR_RE.search(url)
+    district_match = DISTRICT_RE.search(urllib.parse.unquote(url))
+    year = year_match.group(1) if year_match else ""
+    district = district_match.group(1) if district_match else ""
+    return {
+        "url": url,
+        "district": district,
+        "year": year,
+        "kind": kind,
+        "event": f"{district}分齡乒乓球比賽 {year}".strip(),
+    }
+
+
+def discover_wayback() -> list[dict]:
+    prefixes = [
+        "www.lcsd.gov.hk/ls/dagc/clpss/prop/",
+        "www.lcsd.gov.hk/ls/dagc/",
+    ]
+    found: list[dict] = []
+    seen: set[str] = set()
+    for prefix in prefixes:
+        for _ts, original in cdx_prefix(prefix, limit=8000):
+            if not original.lower().endswith(".pdf"):
+                continue
+            if not TT_URL_RE.search(original):
+                continue
+            if original in seen:
+                continue
+            seen.add(original)
+            found.append(guess_lcsd_meta(original))
+    print(f"wayback table-tennis pdfs: {len(found)}")
+    return found
 
 
 CODE_TOKEN = r"(?P<code>[MF](?:AA|[YS][1-5]|D[SAY]|[A-Z]{1,2}))"
@@ -339,18 +400,58 @@ def load_extra() -> list[dict]:
     return json.loads(EXTRA_PATH.read_text(encoding="utf-8"))
 
 
+def persist_extra(items: list[dict]) -> None:
+    extra = load_extra()
+    seen = {d.get("url") for d in extra}
+    added = 0
+    for item in items:
+        url = item.get("url")
+        if not url or url in seen:
+            continue
+        extra.append(
+            {
+                "url": url,
+                "district": item.get("district") or "",
+                "year": item.get("year") or "",
+                "kind": item.get("kind") or kind_from_url(url),
+                "event": item.get("event") or "",
+            }
+        )
+        seen.add(url)
+        added += 1
+    if added:
+        EXTRA_PATH.write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"stored {added} LCSD extra urls")
+
+
 def main() -> None:
     import pdfplumber  # noqa: F401
 
     docs = fetch_listing()
+    listing_urls = {d["url"] for d in docs}
     print(f"listing documents: {len(docs)}")
     extra = load_extra()
     seen = {d["url"] for d in docs}
-    for item in extra:
-        if item["url"] not in seen:
-            docs.append(item)
-            seen.add(item["url"])
-            print(f"extra {item['url']}")
+    archived: list[dict] = []
+    if archive_state.due("lcsdCdx", days=7):
+        archived = discover_wayback()
+        persist_extra(archived)
+        archive_state.mark("lcsdCdx")
+    else:
+        print("skip Wayback CDX (ran within 7 days)")
+    for item in extra + archived:
+        url = item.get("url")
+        if not url or url in seen:
+            continue
+        docs.append(item)
+        seen.add(url)
+        print(f"extra {url}")
+
+    old = json.loads(OUT_PATH.read_text(encoding="utf-8")) if OUT_PATH.exists() else {}
+    done_urls = {d.get("url") for d in (old.get("documents") or []) if d.get("url")}
+    skip_urls = done_urls - listing_urls
+    if skip_urls:
+        print(f"skip {len(skip_urls)} already-parsed LCSD pdfs")
 
     players: dict[str, list[dict]] = defaultdict(list)
     parsed_docs = []
@@ -360,10 +461,12 @@ def main() -> None:
         tmp_dir = Path(tmp)
         for i, meta in enumerate(docs, 1):
             url = meta["url"]
+            if url in skip_urls:
+                continue
             print(f"[{i}/{len(docs)}] {url}")
-            code, body = http_request(url)
-            if code != 200 or not body.startswith(b"%PDF"):
-                print(f"  skip ({code})")
+            body = get_pdf(url, referer=PORTAL_URL)
+            if not body:
+                print("  skip (no pdf)")
                 continue
             path = tmp_dir / f"{i}.pdf"
             path.write_bytes(body)
@@ -407,8 +510,7 @@ def main() -> None:
                 players[rec["norm"]].append(row)
 
     prev_count = None
-    if OUT_PATH.exists():
-        old = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    if old:
         prev_count = old.get("count")
         if prev_count is None:
             prev_count = len(old.get("players") or {})

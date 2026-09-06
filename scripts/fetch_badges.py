@@ -11,9 +11,15 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, unquote
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from archive_http import cdx_prefix, get_pdf  # noqa: E402
+import archive_state  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = ROOT / "data" / "badges.json"
+MISS_PATH = ROOT / "data" / "badge_miss_urls.json"
 LISTING = "https://hstta.hktta.org.hk/training_detail.php?id=10"
 HKT = timezone(timedelta(hours=8))
 USER_AGENT = (
@@ -114,7 +120,49 @@ def listing_urls() -> list[str]:
     return found
 
 
-def related_docs(urls: list[str]) -> list[dict]:
+def guessed_session_docs(use_cdx: bool) -> list[dict]:
+    year_now = datetime.now(HKT).year
+    docs: list[dict] = []
+    seen: set[str] = set()
+    months = list(MONTH.keys())
+    for year in range(2010, year_now + 1):
+        for mon in months:
+            session = f"{year}-{MONTH[mon]}"
+            stamp = short_month(session)
+            base = f"https://hstta.hktta.org.hk/html/BadgeScheme/{year}/{mon}/"
+            extras = [f"{base}Timetable for web ({stamp}).pdf"]
+            for letter in "BSGPD":
+                extras.append(f"{base}Result (for web)_{letter} ({stamp}).pdf")
+            for extra in extras:
+                if extra in seen:
+                    continue
+                seen.add(extra)
+                kind = "timetable" if "Timetable" in extra else "result"
+                docs.append({"url": extra, "session": session, "kind": kind, "wayback": False})
+    if not use_cdx:
+        return docs
+    for _ts, original in cdx_prefix("hstta.hktta.org.hk/html/BadgeScheme/", limit=5000):
+        if ".pdf" not in original.lower():
+            continue
+        session = session_from_url(original)
+        if not session:
+            continue
+        path = unquote(urlparse(original).path).lower()
+        kind = ""
+        if "timetable" in path or "考生名單" in path:
+            kind = "timetable"
+        elif "result" in path:
+            kind = "result"
+        else:
+            continue
+        if original in seen:
+            continue
+        seen.add(original)
+        docs.append({"url": original, "session": session, "kind": kind, "wayback": True})
+    return docs
+
+
+def related_docs(urls: list[str], use_cdx: bool) -> list[dict]:
     docs: list[dict] = []
     seen: set[str] = set()
     folders: set[tuple[str, str]] = set()
@@ -150,6 +198,11 @@ def related_docs(urls: list[str]) -> list[dict]:
             seen.add(extra)
             kind = "timetable" if "Timetable" in extra else "result"
             docs.append({"url": extra, "session": session, "kind": kind})
+    for item in guessed_session_docs(use_cdx):
+        if item["url"] in seen:
+            continue
+        seen.add(item["url"])
+        docs.append(item)
     return docs
 
 
@@ -241,25 +294,71 @@ def merge_players(sittings: list[dict], results: dict[tuple[str, str], dict]) ->
     return players
 
 
+def load_miss() -> set[str]:
+    if not MISS_PATH.exists():
+        return set()
+    try:
+        data = json.loads(MISS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if isinstance(data, list):
+        return set(data)
+    return set()
+
+
+def save_miss(miss: set[str]) -> None:
+    MISS_PATH.write_text(json.dumps(sorted(miss), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def known_badge_urls(old: dict) -> set[str]:
+    found: set[str] = set()
+    for recs in (old.get("players") or {}).values():
+        for rec in recs:
+            for key in ("url", "listUrl"):
+                url = rec.get(key)
+                if url:
+                    found.add(url)
+    return found
+
+
 def main() -> None:
     import pdfplumber  # noqa: F401
 
+    old = json.loads(OUT_PATH.read_text(encoding="utf-8")) if OUT_PATH.exists() else {}
+    miss = load_miss()
+    known = known_badge_urls(old)
     listed = listing_urls()
+    listed_set = set(listed)
     print(f"listing pdfs: {len(listed)}")
-    docs = related_docs(listed)
-    print(f"candidate docs: {len(docs)}")
+    use_cdx = archive_state.due("badgeCdx", days=7)
+    if not use_cdx:
+        print("skip Wayback CDX (ran within 7 days)")
+    docs = related_docs(listed, use_cdx)
+    if use_cdx:
+        archive_state.mark("badgeCdx")
+    pending = []
+    skipped = 0
+    for meta in docs:
+        url = meta["url"]
+        if url not in listed_set and (url in known or url in miss):
+            skipped += 1
+            continue
+        pending.append(meta)
+    print(f"candidate docs: {len(pending)} skipped {skipped}")
 
     sittings: list[dict] = []
     results: dict[tuple[str, str], dict] = {}
     parsed = 0
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
-        for i, meta in enumerate(docs, 1):
+        for i, meta in enumerate(pending, 1):
             url = meta["url"]
-            print(f"[{i}/{len(docs)}] {meta['kind']} {meta['session']} {url}")
-            code, body = http_get(url)
-            if code != 200 or not body.startswith(b"%PDF"):
-                print(f"  skip ({code})")
+            print(f"[{i}/{len(pending)}] {meta['kind']} {meta['session']} {url}")
+            body = get_pdf(url, referer=LISTING, wayback=bool(meta.get("wayback")))
+            if not body:
+                print("  skip (no pdf)")
+                if url not in listed_set:
+                    miss.add(url)
                 continue
             path = tmp_dir / f"{i}.pdf"
             path.write_bytes(body)
@@ -281,8 +380,7 @@ def main() -> None:
 
     players = merge_players(sittings, results)
     prev_count = None
-    if OUT_PATH.exists():
-        old = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    if old:
         prev_count = old.get("count")
         if prev_count is None:
             prev_count = len(old.get("players") or {})
@@ -307,6 +405,7 @@ def main() -> None:
         "players": players,
     }
     OUT_PATH.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    save_miss(miss)
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size} bytes, {len(players)} names)")
 
 

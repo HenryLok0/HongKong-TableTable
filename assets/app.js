@@ -202,6 +202,7 @@ let sourceMeta = null;
 let edgeLookup = false;
 let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
+let hkttaHistory = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
@@ -874,6 +875,71 @@ function findBadges(query) {
   return badgeIndex.players[key] || [];
 }
 
+function decodeHkttaPast(raw, currentPeriod) {
+  if (!Array.isArray(raw)) return [];
+  const period = currentPeriod || snapshot?.period || "";
+  const rows = [];
+  for (const item of raw) {
+    if (item && !Array.isArray(item) && item.period) {
+      if (item.period === period) continue;
+      rows.push(item);
+      continue;
+    }
+    if (!Array.isArray(item) || item.length < 3) continue;
+    if (!item[0] || item[0] === period) continue;
+    rows.push({
+      period: item[0],
+      gender: item[1] || "",
+      group: item[2] || "ALL",
+      rank: item[3] ?? null,
+      points: item[4] ?? null,
+    });
+  }
+  rows.sort((a, b) => String(b.period).localeCompare(String(a.period)));
+  return rows;
+}
+
+function findHkttaPast(query) {
+  const key = normalizeName(query);
+  return decodeHkttaPast(hkttaHistory.players?.[key] || []);
+}
+
+const PAST_GROUP = {
+  ALL: "總榜",
+  JR: "青少年",
+  U9: "U9",
+  U11: "U11",
+  U12: "U12",
+  U13: "U13",
+  U15: "U15",
+  U17: "U17",
+  U18: "U18",
+  U19: "U19",
+  U21: "U21",
+};
+
+function renderHkttaPast(rows) {
+  if (!rows.length) return "";
+  const items = [...rows]
+    .sort((a, b) => String(b.period).localeCompare(String(a.period)) || String(a.group).localeCompare(String(b.group)))
+    .map((r) => {
+      const bits = [
+        r.period,
+        r.gender === "F" ? "女子" : r.gender === "M" ? "男子" : "",
+        PAST_GROUP[r.group] || r.group,
+        r.rank != null ? `第${r.rank}` : "",
+        r.points != null ? `${r.points}分` : "",
+      ].filter(Boolean);
+      return `<li>${escapeHtml(bits.join(" · "))}</li>`;
+    })
+    .join("");
+  const title = `乒總過往排名榜（${rows.length} 筆）`;
+  if (rows.length > 8) {
+    return `<div class="lcsd-box"><details><summary>${escapeHtml(title)}</summary><ul>${items}</ul></details></div>`;
+  }
+  return `<div class="lcsd-box"><span>${escapeHtml(title)}</span><ul>${items}</ul></div>`;
+}
+
 function lcsdGenderFromGroup(rec) {
   const code = String(rec.group || "").toUpperCase();
   if (!code) return "";
@@ -1311,12 +1377,15 @@ function renderCard(item, totals, orderLabel) {
   const bucketText = divisionLabel(bucket);
   const lcsdHtml = renderLcsd(item.lcsd);
   const badgeHtml = renderBadges(item.badges || []);
+  const pastHtml = renderHkttaPast(item.hkttaPast || []);
 
   if (!item.matches.length) {
-    const hasExtra = item.lcsd.length || (item.badges || []).length;
+    const hasExtra = item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length;
     const tone = hasExtra ? "lcsd" : "missing";
     const possible = item.possible || [];
-    let miss = item.lcsd.length
+    let miss = (item.hkttaPast || []).length
+      ? "今期乒總公布榜未見精確姓名，但過往期數嘅排名榜有呢個名。"
+      : item.lcsd.length
       ? "今期乒總公布榜未見精確姓名，但康文署分齡賽程／成績 PDF 有呢個名。"
       : (item.badges || []).length
         ? "今期乒總公布榜未見精確姓名，但恒生公開章別考試時間表有呢個名。"
@@ -1336,6 +1405,7 @@ function renderCard(item, totals, orderLabel) {
         <div>${escapeHtml(orderLabel)}</div>
       </div>
       <p>${miss}</p>
+      ${pastHtml}
       ${lcsdHtml}
       ${badgeHtml}
       <div class="links">${renderLinks(item.query)}</div>
@@ -1364,6 +1434,7 @@ function renderCard(item, totals, orderLabel) {
         </div>
         <p>${levelText(player)}</p>
         <div class="ranks">${rankChips(player)}</div>
+        ${pastHtml}
         ${lcsdHtml}
         ${badgeHtml}
         <div class="links">${renderLinks(player.name)}</div>
@@ -1414,16 +1485,17 @@ function bestRank(item) {
 }
 
 function hasRecord(item) {
-  return Boolean(item.matches.length || item.lcsd.length || (item.badges || []).length);
+  return Boolean(item.matches.length || item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length);
 }
 
 function listRankTier(item) {
   if (item.matches.length) return 1;
+  if ((item.hkttaPast || []).length) return 2;
   const badges = item.badges || [];
-  if (badges.some((r) => r.passed)) return 2;
-  if (badges.length) return 3;
-  if (item.lcsd.length) return 4;
-  return 5;
+  if (badges.some((r) => r.passed)) return 3;
+  if (badges.length) return 4;
+  if (item.lcsd.length) return 5;
+  return 6;
 }
 
 function compareBadgeStrength(a, b) {
@@ -1806,6 +1878,7 @@ async function runSearch() {
       possible: matches.length ? [] : findPossible(query),
       lcsd: findLcsd(query),
       badges: findBadges(query),
+      hkttaPast: findHkttaPast(query),
     };
   });
   setNamesEditorOpen(false);
@@ -1994,14 +2067,16 @@ async function bootLocal(shared) {
   bindUi();
   if (shared.length) await runSearch();
   try {
-    const [lcsdRes, ageMapRes, badgeRes] = await Promise.all([
+    const [lcsdRes, ageMapRes, badgeRes, histRes] = await Promise.all([
       fetch(dataUrl("lcsd.json")),
       fetch(dataUrl("lcsd_age_maps.json")),
       fetch(dataUrl("badges.json")),
+      fetch(dataUrl("hktta_history.json")),
     ]);
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
+    if (histRes.ok) hkttaHistory = await histRes.json();
     indexLcsdDocCodes();
     buildNameStats();
     renderDataMeta();
@@ -2010,6 +2085,7 @@ async function bootLocal(shared) {
         ...item,
         lcsd: findLcsd(item.query),
         badges: findBadges(item.query),
+        hkttaPast: item.hkttaPast || findHkttaPast(item.query),
       }));
       renderResults();
     }

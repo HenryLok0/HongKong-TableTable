@@ -874,10 +874,11 @@ function scorePlayers(players) {
 }
 
 async function buildIndex(ctx) {
-  const [rankings, lcsd, badges] = await Promise.all([
+  const [rankings, lcsd, badges, history] = await Promise.all([
     originJson("data/rankings.json", ctx),
     originJson("data/lcsd.json", ctx),
     originJson("data/badges.json", ctx),
+    originJson("data/hktta_history.json", ctx).catch(() => ({ players: {} })),
   ]);
   const players = rankings.players || [];
   scorePlayers(players);
@@ -905,6 +906,12 @@ async function buildIndex(ctx) {
     const key = normalizeName(name) || name;
     unique.add(key);
     badgeByName.set(key, recs);
+  }
+
+  const hkttaPastByName = new Map();
+  for (const [name, recs] of Object.entries(history.players || {})) {
+    const key = normalizeName(name) || name;
+    hkttaPastByName.set(key, recs);
   }
 
   const lcsdDocCodes = {};
@@ -938,6 +945,7 @@ async function buildIndex(ctx) {
     playerByName,
     lcsdByName,
     badgeByName,
+    hkttaPastByName,
     lcsdDocCodes,
   };
 }
@@ -965,6 +973,25 @@ function findPossible(index, key) {
   return hits;
 }
 
+function decodeHkttaPast(raw, currentPeriod) {
+  if (!Array.isArray(raw)) return [];
+  const rows = [];
+  for (const item of raw) {
+    if (!Array.isArray(item) || item.length < 3) continue;
+    const period = String(item[0] || "");
+    if (!period || period === currentPeriod) continue;
+    rows.push({
+      period,
+      gender: item[1] || "",
+      group: item[2] || "ALL",
+      rank: item[3] ?? null,
+      points: item[4] ?? null,
+    });
+  }
+  rows.sort((a, b) => String(b.period).localeCompare(String(a.period)) || String(a.group).localeCompare(String(b.group)));
+  return rows;
+}
+
 function lookupNames(index, names) {
   const queries = [];
   const seen = new Set();
@@ -990,6 +1017,7 @@ function lookupNames(index, names) {
       possible: matches.length ? [] : findPossible(index, key),
       lcsd: index.lcsdByName.get(key) || [],
       badges: index.badgeByName.get(key) || [],
+      hkttaPast: decodeHkttaPast(index.hkttaPastByName.get(key) || [], index.period),
     };
   });
 
