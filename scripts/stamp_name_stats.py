@@ -360,6 +360,21 @@ def main() -> None:
         row[band] = row.get(band, 0) + 1
         band_n[band] = band_n.get(band, 0) + 1
 
+    last_age: dict[str, dict[str, dict[str, int]]] = {"M": {}, "F": {}}
+    band_n_g: dict[str, dict[str, int]] = {"M": {}, "F": {}}
+
+    def bump_last(name: str, band: str, g: object) -> None:
+        if not band or g not in ("M", "F"):
+            return
+        chars = given_chars(name)
+        if not chars:
+            return
+        last = chars[-1]
+        row = last_age[g].setdefault(last, {})
+        row[band] = row.get(band, 0) + 1
+        band_n_g[g][band] = band_n_g[g].get(band, 0) + 1
+        bump_age(name, band)
+
     for player in rankings.get("players") or []:
         name = str(player.get("name") or "")
         given = given_chars(name)
@@ -368,7 +383,7 @@ def main() -> None:
             for ch in given:
                 bump_gender(ch, g)
         young = HKTTA_AGE.get((player.get("age") or {}).get("youngestGroup") or "")
-        bump_age(name, young or "")
+        bump_last(name, young or "", g)
         if young:
             youth.add(norm(name))
 
@@ -390,7 +405,8 @@ def main() -> None:
         band, doubles = lcsd_age_band(rows, maps, doc_codes, year_now)
         if doubles:
             continue
-        bump_age(name, band)
+        g = next(iter(genders)) if len(genders) == 1 else ""
+        bump_last(name, band, g)
 
     payload = {
         "source": "Current HKTTA ranking snapshot plus LCSD records (not historical ranking PDFs)",
@@ -398,9 +414,14 @@ def main() -> None:
         "gender": gender,
         "givenAge": given_age,
         "bandN": band_n,
+        "lastAgeByGender": last_age,
+        "bandNByGender": band_n_g,
     }
     OUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"wrote {OUT} ({OUT.stat().st_size} bytes, {len(gender)} chars, {len(given_age)} given names)")
+    print(
+        f"wrote {OUT} ({OUT.stat().st_size} bytes, {len(gender)} chars, "
+        f"{len(last_age['M'])} male last, {len(last_age['F'])} female last)"
+    )
 
 
 if __name__ == "__main__":

@@ -28,9 +28,24 @@ const AGE_BANDS = [
 ];
 const AGE_ASC = [...AGE_BANDS].sort((a, b) => a.min - b.min || a.max - b.max);
 const ADULT_AGE_FLOOR = 19;
-const AGE_NAME_MIN_SAMPLES = 3;
+const AGE_LAST_MIN_SAMPLES = 8;
 const AGE_COVER_MASS = 0.75;
 const AGE_MAX_SPAN = 18;
+const AGE_MODE_SHARE = 0.4;
+const AGE_BIMODAL_SHARE = 0.22;
+
+const NAME_CHAR_FOLD = {
+  鸣: "鳴",
+  乐: "樂",
+  启: "啟",
+  国: "國",
+  门: "門",
+  马: "馬",
+  龙: "龍",
+  凤: "鳳",
+  亚: "亞",
+  么: "麼",
+};
 
 const HKTTA_AGE = {
   U9: "u9",
@@ -222,6 +237,7 @@ let lastResults = [];
 let nameStats = {
   gender: new Map(),
   givenAge: new Map(),
+  lastAge: new Map(),
   bandN: new Map(),
 };
 
@@ -540,10 +556,45 @@ async function copyShareLink() {
   }
 }
 
+function foldNameChar(ch) {
+  return NAME_CHAR_FOLD[ch] || ch;
+}
+
 function givenNameChars(name) {
-  const chars = Array.from(normalizeName(name));
+  const chars = Array.from(normalizeName(name)).map(foldNameChar);
   if (chars.length < 2) return [];
   return chars.slice(1);
+}
+
+function emptyNameStats() {
+  return {
+    gender: new Map(),
+    givenAge: new Map(),
+    lastAgeByGender: { M: new Map(), F: new Map() },
+    bandN: new Map(),
+    bandNByGender: { M: new Map(), F: new Map() },
+  };
+}
+
+function mapTotal(map) {
+  let n = 0;
+  if (!map) return 0;
+  for (const value of map.values()) n += Number(value) || 0;
+  return n;
+}
+
+function readBandMap(raw) {
+  const map = new Map();
+  for (const [band, n] of Object.entries(raw || {})) map.set(band, Number(n) || 0);
+  return map;
+}
+
+function readLastAgeGender(raw) {
+  const map = new Map();
+  for (const [ch, bands] of Object.entries(raw || {})) {
+    map.set(foldNameChar(ch), readBandMap(bands));
+  }
+  return map;
 }
 
 function bumpCountMap(map, key) {
@@ -556,6 +607,17 @@ function bumpGenderStat(ch, gender) {
   nameStats.gender.set(ch, row);
 }
 
+function bumpLastAgeGender(name, band, gender) {
+  if (!band || (gender !== "M" && gender !== "F")) return;
+  const last = givenNameChars(name).pop();
+  if (!last) return;
+  const table = nameStats.lastAgeByGender[gender];
+  const row = table.get(last) || new Map();
+  bumpCountMap(row, band);
+  table.set(last, row);
+  bumpCountMap(nameStats.bandNByGender[gender], band);
+}
+
 function bumpGivenAge(givenKey, band) {
   if (!givenKey || !band) return;
   const row = nameStats.givenAge.get(givenKey) || new Map();
@@ -564,28 +626,31 @@ function bumpGivenAge(givenKey, band) {
   bumpCountMap(nameStats.bandN, band);
 }
 
-function recordNameAge(name, band) {
+function recordNameAge(name, band, gender) {
   bumpGivenAge(givenNameChars(name).join(""), band);
+  bumpLastAgeGender(name, band, gender);
 }
 
 function applyNameStats(data) {
-  nameStats = {
-    gender: new Map(),
-    givenAge: new Map(),
-    bandN: new Map(),
-  };
+  nameStats = emptyNameStats();
   if (!data) return;
   for (const [ch, row] of Object.entries(data.gender || {})) {
-    nameStats.gender.set(ch, { M: Number(row.M) || 0, F: Number(row.F) || 0 });
+    nameStats.gender.set(foldNameChar(ch), { M: Number(row.M) || 0, F: Number(row.F) || 0 });
   }
   for (const [given, bands] of Object.entries(data.givenAge || {})) {
-    const map = new Map();
-    for (const [band, n] of Object.entries(bands || {})) map.set(band, Number(n) || 0);
-    nameStats.givenAge.set(given, map);
+    nameStats.givenAge.set(Array.from(given).map(foldNameChar).join(""), readBandMap(bands));
   }
   for (const [band, n] of Object.entries(data.bandN || {})) {
     nameStats.bandN.set(band, Number(n) || 0);
   }
+  nameStats.lastAgeByGender = {
+    M: readLastAgeGender(data.lastAgeByGender?.M),
+    F: readLastAgeGender(data.lastAgeByGender?.F),
+  };
+  nameStats.bandNByGender = {
+    M: readBandMap(data.bandNByGender?.M),
+    F: readBandMap(data.bandNByGender?.F),
+  };
 }
 
 async function loadNameStats() {
@@ -602,17 +667,13 @@ async function loadNameStats() {
 }
 
 function buildNameStats() {
-  nameStats = {
-    gender: new Map(),
-    givenAge: new Map(),
-    bandN: new Map(),
-  };
+  nameStats = emptyNameStats();
   for (const player of snapshot.players || []) {
     const given = givenNameChars(player.name);
     if (player.gender === "M" || player.gender === "F") {
       given.forEach((ch) => bumpGenderStat(ch, player.gender));
     }
-    recordNameAge(player.name, HKTTA_AGE[player.age?.youngestGroup] || "");
+    recordNameAge(player.name, HKTTA_AGE[player.age?.youngestGroup] || "", player.gender);
   }
   for (const [name, recs] of Object.entries(lcsdIndex.players || {})) {
     const item = { query: name, matches: [], lcsd: recs };
@@ -626,7 +687,7 @@ function buildNameStats() {
     if (onHkttaYouth) continue;
     const age = lcsdAgeFromItem(item);
     if (age.doubles) continue;
-    recordNameAge(name, age.band || "");
+    recordNameAge(name, age.band || "", gender);
   }
 }
 
@@ -716,13 +777,14 @@ function adultFloorGuess() {
   return makeAgeGuess(ADULT_AGE_FLOOR, OPEN);
 }
 
-function reweightedNameScores(rawMap) {
+function reweightedNameScores(rawMap, popMap) {
   const scores = Object.fromEntries(AGE_BANDS.map((b) => [b.id, 0]));
+  const pop = popMap || nameStats.bandN;
   let rawN = 0;
   for (const [band, count] of rawMap) {
     rawN += count;
-    const pop = nameStats.bandN.get(band) || 0;
-    scores[band] = pop > 0 ? count / pop : 0;
+    const size = pop.get(band) || 0;
+    scores[band] = size > 0 ? count / size : 0;
   }
   return { scores, rawN };
 }
@@ -745,6 +807,67 @@ function applyAgePriors(scores, item) {
   return next;
 }
 
+function scoreTotal(scores) {
+  return AGE_ASC.reduce((sum, band) => sum + (scores[band.id] || 0), 0);
+}
+
+function isBimodalAge(scores, total) {
+  if (total <= 0) return false;
+  let youth = 0;
+  let older = 0;
+  for (const band of AGE_ASC) {
+    const mass = scores[band.id] || 0;
+    if (band.max < ADULT_AGE_FLOOR) youth += mass;
+    else if (band.min >= 35) older += mass;
+  }
+  return youth / total >= AGE_BIMODAL_SHARE && older / total >= AGE_BIMODAL_SHARE;
+}
+
+function clipAgeGuess(min, max, floor) {
+  const lo = floor ? Math.max(min, floor) : min;
+  const hi = max;
+  if (lo > (hi === OPEN ? 200 : hi)) return floor ? adultFloorGuess() : null;
+  return makeAgeGuess(lo, hi);
+}
+
+function posteriorAgeGuess(scores, floor) {
+  const total = scoreTotal(scores);
+  if (total <= 0) return floor ? adultFloorGuess() : null;
+  if (isBimodalAge(scores, total)) return floor ? adultFloorGuess() : null;
+
+  let bestIdx = 0;
+  AGE_ASC.forEach((band, idx) => {
+    if ((scores[band.id] || 0) > (scores[AGE_ASC[bestIdx].id] || 0)) bestIdx = idx;
+  });
+  const best = AGE_ASC[bestIdx];
+  const share = (scores[best.id] || 0) / total;
+  if (share >= AGE_MODE_SHARE) {
+    const neighbors = [AGE_ASC[bestIdx - 1], best, AGE_ASC[bestIdx + 1]].filter(Boolean);
+    const mixYouth = neighbors.some((band) => band.max < ADULT_AGE_FLOOR && (scores[band.id] || 0) > 0);
+    const mixOlder = neighbors.some((band) => band.min >= 35 && (scores[band.id] || 0) > 0);
+    if (!(mixYouth && mixOlder)) return clipAgeGuess(best.min, best.max, floor);
+  }
+
+  const cover = coveringAgeRange(scores);
+  if (cover && cover.span <= AGE_MAX_SPAN) return clipAgeGuess(cover.min, cover.max, floor);
+  return floor ? adultFloorGuess() : null;
+}
+
+function estimateAge(item) {
+  const floor = hkttaAdultFloor(item);
+  const gender = inferGender(item).gender;
+  if (gender !== "M" && gender !== "F") return floor ? adultFloorGuess() : null;
+  const last = givenNameChars(item.query).pop();
+  if (!last) return floor ? adultFloorGuess() : null;
+  const rawMap = nameStats.lastAgeByGender[gender]?.get(last);
+  if (!rawMap || mapTotal(rawMap) < AGE_LAST_MIN_SAMPLES) return floor ? adultFloorGuess() : null;
+  const counted = reweightedNameScores(rawMap, nameStats.bandNByGender[gender]);
+  const scores = applyAgePriors(counted.scores, item);
+  const guessed = posteriorAgeGuess(scores, floor);
+  if (guessed) return guessed;
+  return floor ? adultFloorGuess() : null;
+}
+
 function coveringAgeRange(scores) {
   const total = AGE_ASC.reduce((sum, band) => sum + (scores[band.id] || 0), 0);
   if (total <= 0) return null;
@@ -762,21 +885,6 @@ function coveringAgeRange(scores) {
     }
   }
   return best;
-}
-
-function estimateAge(item) {
-  const floor = hkttaAdultFloor(item);
-  const rawMap = nameStats.givenAge.get(givenNameChars(item.query).join(""));
-  if (!rawMap || !rawMap.size) return floor ? adultFloorGuess() : null;
-  const { scores: rawScores, rawN } = reweightedNameScores(rawMap);
-  const scores = applyAgePriors(rawScores, item);
-  if (rawN < AGE_NAME_MIN_SAMPLES) return floor ? adultFloorGuess() : null;
-  const cover = coveringAgeRange(scores);
-  if (!cover) return floor ? adultFloorGuess() : null;
-  if (cover.span > AGE_MAX_SPAN) return floor ? adultFloorGuess() : null;
-  if (floor && cover.max < floor) return adultFloorGuess();
-  const min = floor ? Math.max(cover.min, floor) : cover.min;
-  return makeAgeGuess(min, cover.max);
 }
 
 function overall(player) {
