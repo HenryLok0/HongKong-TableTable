@@ -6,6 +6,19 @@
       "lcsd": 6406,
       "badges": 2916,
       "unique": 11198
+    },
+    {
+      "at": "2026-09-06 13:18",
+      "hktta": 5464,
+      "lcsd": 6438,
+      "badges": 2933,
+      "unique": 11223,
+      "prev": {
+        "hktta": 5464,
+        "lcsd": 6406,
+        "badges": 2916,
+        "unique": 11198
+      }
     }
   ]
 }

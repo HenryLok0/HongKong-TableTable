@@ -172,7 +172,7 @@
         "MK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "MXA": {
           "ageMin": 55,
@@ -257,7 +257,7 @@
         "MK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "MXA": {
           "ageMin": 55,
@@ -342,17 +342,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -412,17 +412,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -482,17 +482,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -552,17 +552,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -622,17 +622,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -692,17 +692,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1307,17 +1307,17 @@
         "MDS": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "MDA": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MDY": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1372,17 +1372,17 @@
         "MDS": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "MDA": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MDY": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1442,7 +1442,7 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
@@ -1452,7 +1452,7 @@
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1512,7 +1512,7 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
@@ -1522,7 +1522,7 @@
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1582,17 +1582,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1652,17 +1652,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1677,7 +1677,7 @@
         "MK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -1692,7 +1692,7 @@
         "MK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "MB": {
           "ageMin": 60,
@@ -1807,7 +1807,7 @@
         "FK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "FL": {
           "ageMin": 35,
@@ -2032,17 +2032,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -2107,17 +2107,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         },
         "FAA": {
           "ageMin": 65,
@@ -2287,12 +2287,12 @@
         "MK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "MDA": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "MDB": {
           "ageMin": 19,
@@ -2302,7 +2302,7 @@
         "MDC": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -2362,12 +2362,12 @@
         "MK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "MDA": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "MDB": {
           "ageMin": 19,
@@ -2377,7 +2377,7 @@
         "MDC": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         },
         "FA": {
           "ageMin": 70,
@@ -2432,7 +2432,7 @@
         "FK": {
           "ageMin": 0,
           "ageMax": 9,
-          "doubles": false
+          "doubles": true
         },
         "FDA": {
           "ageMin": 35,
@@ -2657,7 +2657,7 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
@@ -2667,7 +2667,7 @@
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -2732,7 +2732,7 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
@@ -2742,7 +2742,7 @@
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -2777,7 +2777,7 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "FA": {
           "ageMin": 60,
@@ -2787,12 +2787,12 @@
         "FK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         },
         "FJ": {
           "ageMin": 0,
@@ -2802,7 +2802,7 @@
         "FM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -2922,17 +2922,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -2992,17 +2992,17 @@
         "MK": {
           "ageMin": 35,
           "ageMax": null,
-          "doubles": false
+          "doubles": true
         },
         "ML": {
           "ageMin": 19,
           "ageMax": 34,
-          "doubles": false
+          "doubles": true
         },
         "MM": {
           "ageMin": 0,
           "ageMax": 18,
-          "doubles": false
+          "doubles": true
         }
       }
     },
@@ -3157,5 +3157,5 @@
       }
     }
   },
-  "updated": "2026-09-05 14:29"
+  "updated": "2026-09-06 13:14"
 }
