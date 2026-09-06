@@ -99,9 +99,24 @@ def write_history(snap: dict) -> None:
     )
 
 
+def last_history_unique() -> int | None:
+    if not HISTORY.exists():
+        return None
+    try:
+        snaps = load(HISTORY).get("snapshots") or []
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not snaps:
+        return None
+    value = snaps[-1].get("unique")
+    return int(value) if value is not None else None
+
+
 def stamp_unique(snap: dict) -> None:
     rankings = load(RANKINGS)
-    prev = rankings.get("uniqueCount")
+    prev = last_history_unique()
+    if prev is None:
+        prev = rankings.get("uniqueCount")
     if prev is None:
         prev = snap["unique"]
     rankings["uniqueCount"] = snap["unique"]
