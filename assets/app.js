@@ -1561,7 +1561,12 @@ function buildFilters(results) {
 
 function stampDate(value) {
   const text = String(value || "").trim();
-  return text ? text.slice(0, 10) : "";
+  if (!text) return "";
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?/.exec(text);
+  if (!match) return text.slice(0, 10);
+  if (!match[2]) return match[1];
+  const hour = match[2].padStart(2, "0");
+  return `${match[1]} (${hour}:${match[3]})`;
 }
 
 function latestUpdated(...values) {
