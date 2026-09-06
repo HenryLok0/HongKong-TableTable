@@ -521,73 +521,9 @@ async function loadSnapshots() {
   }
 }
 
-async function triggerDataUpdate(env) {
-  const token = env.GITHUB_TOKEN || env.GH_PAT;
-  if (!token) return { refresh: true, ok: false, error: "missing GITHUB_TOKEN" };
-  const res = await fetch(
-    "https://api.github.com/repos/HenryLok0/HongKong-TableTable/actions/workflows/update-rankings.yml/dispatches",
-    {
-      method: "POST",
-      headers: githubApiHeaders(token),
-      body: JSON.stringify({ ref: "main" }),
-    },
-  );
-  if (res.status === 204) return { refresh: true, ok: true };
-  const detail = await res.text();
-  return { refresh: true, ok: false, error: detail.slice(0, 300) || `github ${res.status}` };
 }
 
-function githubApiHeaders(token) {
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "hk-tt-worker",
-  };
-}
-
-async function dataUpdateStatus(env, since) {
-  const token = env.GITHUB_TOKEN || env.GH_PAT;
-  if (!token) return { phase: "error", percent: 0, label: "未設定 GITHUB_TOKEN" };
-  const runsRes = await fetch(
-    "https://api.github.com/repos/HenryLok0/HongKong-TableTable/actions/workflows/update-rankings.yml/runs?per_page=8",
-    { headers: githubApiHeaders(token) },
-  );
-  if (!runsRes.ok) return { phase: "error", percent: 0, label: "讀唔到 Actions 狀態" };
-  const runs = (await runsRes.json()).workflow_runs || [];
-  const min = Number(since) || 0;
-  const run = runs.find((row) => new Date(row.created_at).getTime() >= min - 20000) || null;
-  if (!run) return { phase: "waiting", percent: 8, label: "等 GitHub 開始任務…" };
-  if (run.status === "queued" || run.status === "pending" || run.status === "waiting") {
-    return { phase: "running", percent: 14, label: "排隊中" };
-  }
-  if (run.status === "in_progress") {
-    let percent = 22;
-    let label = "執行中";
-    const jobsRes = await fetch(
-      `https://api.github.com/repos/HenryLok0/HongKong-TableTable/actions/runs/${run.id}/jobs`,
-      { headers: githubApiHeaders(token) },
-    );
-    if (jobsRes.ok) {
-      const jobs = (await jobsRes.json()).jobs || [];
-      const steps = jobs[0]?.steps || [];
-      if (steps.length) {
-        const done = steps.filter((step) => step.status === "completed").length;
-        percent = Math.min(92, 18 + Math.round((done / steps.length) * 74));
-        const current = steps.find((step) => step.status === "in_progress");
-        label = current?.name || "抓緊資料…";
-      }
-    }
-    return { phase: "running", percent, label };
-  }
-  if (run.status === "completed") {
-    if (run.conclusion === "success") return { phase: "done", percent: 100, label: "更新完成" };
-    return { phase: "error", percent: 100, label: "Actions 失敗：" + (run.conclusion || "") };
-  }
-  return { phase: "running", percent: 20, label: String(run.status || "執行中") };
-}
-
-function adminPage(rows, shortCount, snaps, canForce) {
+function adminPage(rows, shortCount, snaps) {
   const counts = new Map();
   for (const row of rows) {
     for (const name of row.names) counts.set(name, (counts.get(name) || 0) + 1);
@@ -714,10 +650,6 @@ function adminPage(rows, shortCount, snaps, canForce) {
     .snap-table .down { color: var(--miss); font-weight: 700; }
     @media (prefers-color-scheme: dark) { .snap-table .up { color: #9ddbb8; } }
     .now { display: inline-block; margin-right: .35rem; padding: .05rem .4rem; border-radius: 999px; background: var(--wash); color: var(--accent); font-size: .72rem; font-weight: 700; }
-    .progress-box { margin-top: .85rem; padding: .75rem .85rem; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
-    .progress-label { margin: 0 0 .45rem; font-weight: 700; }
-    .bar { height: .55rem; background: var(--line); border-radius: 999px; overflow: hidden; }
-    .bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .35s ease; }
     @media (max-width: 640px) {
       .card { flex-wrap: wrap; }
       .actions { flex-direction: row; min-width: 0; width: 100%; }
@@ -741,21 +673,9 @@ function adminPage(rows, shortCount, snaps, canForce) {
     <section class="panel">
       <div class="head-row">
         <h2>資料人數</h2>
-        <div class="head-actions">
-          <button class="btn" type="button" id="refresh-data"${canForce ? "" : " disabled"}>強制更新資料</button>
-        </div>
       </div>
-      <p class="hint">${canForce
-        ? "會叫 GitHub Actions 重新抓乒總／康文署／恒生 PDF。進度喺下面。完成後會自動重新整理。"
-        : "未設定 Worker secret GITHUB_TOKEN（要有 repo + workflow 權限），所以唔能夠喺呢度強制更新。仍然可以用 GitHub Actions 手動 Run workflow。"}</p>
+      <p class="hint">每日香港 12:30、00:30 由 GitHub Actions 抓檔後會加一行。急嘅話去 Actions 撳 Run workflow。</p>
       ${snapshotsTable(snaps)}
-      <div class="progress-box" id="update-progress" hidden>
-        <p class="progress-label" id="update-label">準備中</p>
-        <div class="bar" id="update-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div class="bar-fill" id="update-fill"></div>
-        </div>
-        <p class="hint" id="update-pct">0%</p>
-      </div>
     </section>
     <section class="panel" id="log-panel">
       <div class="head-row">
@@ -829,7 +749,7 @@ function adminPage(rows, shortCount, snaps, canForce) {
     }
     async function send(body) {
       const panel = document.getElementById("log-panel");
-      if (!body.refresh) panel?.classList.add("busy");
+      panel?.classList.add("busy");
       try {
         const res = await fetch("/api/admin/queries", {
           method: "POST",
@@ -840,14 +760,6 @@ function adminPage(rows, shortCount, snaps, canForce) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           alert(data.error === "unauthorized" ? "未授權" : (data.error || "操作失敗"));
-          return;
-        }
-        if (data.refresh) {
-          if (!data.ok) {
-            alert("更新失敗：" + (data.error || ""));
-            return;
-          }
-          await watchUpdate(Date.now());
           return;
         }
         const msg = data.restored != null
@@ -862,47 +774,6 @@ function adminPage(rows, shortCount, snaps, canForce) {
       } finally {
         panel?.classList.remove("busy");
       }
-    }
-    function setProgress(percent, label) {
-      const box = document.getElementById("update-progress");
-      const fill = document.getElementById("update-fill");
-      const bar = document.getElementById("update-bar");
-      if (box) box.hidden = false;
-      if (fill) fill.style.width = percent + "%";
-      if (bar) bar.setAttribute("aria-valuenow", String(percent));
-      const lab = document.getElementById("update-label");
-      const pct = document.getElementById("update-pct");
-      if (lab) lab.textContent = label;
-      if (pct) pct.textContent = percent + "%";
-    }
-    async function watchUpdate(since) {
-      const btn = document.getElementById("refresh-data");
-      if (btn) btn.disabled = true;
-      setProgress(4, "已送出，等 GitHub 接單…");
-      const started = Date.now();
-      while (Date.now() - started < 12 * 60 * 1000) {
-        await new Promise((wait) => setTimeout(wait, 3000));
-        const res = await fetch("/api/admin/queries", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ updateStatus: true, since, k }),
-        });
-        const data = await res.json().catch(() => ({}));
-        setProgress(Number(data.percent) || 8, data.label || "更新中");
-        if (data.phase === "done") {
-          sessionStorage.setItem("hktt_admin_flash", "資料更新完成。");
-          location.reload();
-          return;
-        }
-        if (data.phase === "error") {
-          if (btn) btn.disabled = false;
-          alert(data.label || "更新失敗");
-          return;
-        }
-      }
-      if (btn) btn.disabled = false;
-      alert("等得太耐。去 GitHub Actions 睇下仲跑緊未。");
     }
     document.getElementById("reload-admin")?.addEventListener("click", () => location.reload());
     document.getElementById("filter")?.addEventListener("input", (event) => {
@@ -949,9 +820,6 @@ function adminPage(rows, shortCount, snaps, canForce) {
     document.getElementById("restore-all")?.addEventListener("click", (event) => {
       arm(event.currentTarget, "再撳確認還原（時間記成而家）", () => send({ restore: true }));
     });
-    document.getElementById("refresh-data")?.addEventListener("click", (event) => {
-      arm(event.currentTarget, "再撳確認開始抓檔", () => send({ refresh: true }));
-    });
     document.getElementById("del-shorts")?.addEventListener("click", (event) => {
       arm(event.currentTarget, "再撳確認剷除全部短連結", () => send({ shorts: true }));
     });
@@ -962,7 +830,7 @@ function adminPage(rows, shortCount, snaps, canForce) {
         arm(event.currentTarget, "再撳確認剷除", () => send({ key }));
       });
     });
-    ["restore-all", "del-picked", "del-all", "del-shorts", "refresh-data"].forEach((id) => {
+    ["restore-all", "del-picked", "del-all", "del-shorts"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.setAttribute("data-arm", "1");
     });
@@ -1256,12 +1124,6 @@ export default {
         if (!adminOk(request, env, body.k)) {
           return json({ error: "unauthorized" }, { status: 401 });
         }
-        if (body.refresh) {
-          return json(await triggerDataUpdate(env));
-        }
-        if (body.updateStatus) {
-          return json(await dataUpdateStatus(env, body.since));
-        }
         if (!env.LINKS) return json({ error: "LINKS kv missing" }, { status: 503 });
         if (body.all) {
           const deleted = await deleteAllQueryLogs(env);
@@ -1308,7 +1170,7 @@ export default {
       if (incoming.searchParams.get("k") === env.ADMIN_SECRET) {
         headers["Set-Cookie"] = adminCookie(env);
       }
-      return new Response(adminPage(rows, shortCount, snaps, Boolean(env.GITHUB_TOKEN || env.GH_PAT)), { headers });
+      return new Response(adminPage(rows, shortCount, snaps), { headers });
     }
 
     if (path === "/api/log") {
