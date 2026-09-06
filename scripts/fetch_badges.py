@@ -27,12 +27,28 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.I)
+MONTH_NAME = (
+    "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+)
 SESSION_RE = re.compile(
-    r"/BadgeScheme/(\d{4})/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/",
+    rf"/BadgeScheme/(\d{{4}})/({MONTH_NAME})(?:Result)?/",
     re.I,
 )
-CODE_RE = re.compile(r"\b([BSGPD][A-Z]{0,3}\d+)\b")
-NAME_RE = re.compile(r"^([BSGPD][A-Z]{0,3}\d+)\s+([\u4e00-\u9fff]{2,4})\b")
+SESSION_FILE_RE = re.compile(
+    rf"/BadgeScheme/(20\d{{2}})/(?:20\d{{2}})?({MONTH_NAME})",
+    re.I,
+)
+SESSION_STAMP_RE = re.compile(rf"({MONTH_NAME})[-_]?(\d{{2,4}})", re.I)
+SKIP_RE = re.compile(
+    r"form|prospectus|handbook|notice|scope|guideline|covid|entryform|"
+    r"schoolapp|prevention|arrangement|exammarks|nonreg",
+    re.I,
+)
+CODE_RE = re.compile(r"\b([BSGPD][A-Z]{0,3})\s*(\d+)\b")
+NAME_COMPACT_RE = re.compile(r"^([BSGPD][A-Z]{0,3}\d+)\s+([\u4e00-\u9fff]{2,4})\b")
+NAME_SPACED_RE = re.compile(
+    r"^(?:\d)?([BSGPD][A-Z]{0,3})\s+(\d+)\s+([\u4e00-\u9fff]{2,4})\b"
+)
 BADGE_LABEL_RE = re.compile(r"(鑽章(?:（[一二]）)?|白金章|金章|銀章|銅章)")
 PASS_RE = re.compile(r"考獲([^，\s]+章(?:（[一二]）)?)資格")
 MONTH = {
@@ -82,17 +98,41 @@ def normalize_name(name: str) -> str:
 def abs_url(href: str) -> str:
     href = href.replace("&amp;", "&").strip()
     if href.startswith("//"):
-        return "https:" + href
+        return canon_url("https:" + href)
     if href.startswith("http://"):
         href = "https://" + href[len("http://") :]
-    return urljoin(LISTING, href)
+    return canon_url(urljoin(LISTING, href))
+
+
+def canon_url(url: str) -> str:
+    url = unquote(url.replace("http://", "https://").replace(":80/", "/"))
+    return url.split("#")[0]
 
 
 def session_from_url(url: str) -> str:
-    match = SESSION_RE.search(url)
-    if not match:
+    path = unquote(urlparse(url).path)
+    match = SESSION_RE.search(path) or SESSION_FILE_RE.search(path)
+    if match:
+        return f"{match.group(1)}-{MONTH[match.group(2).title()]}"
+    stamp = SESSION_STAMP_RE.search(path)
+    if stamp:
+        year_part = stamp.group(2)
+        year = f"20{year_part}" if len(year_part) == 2 else year_part
+        if year.isdigit() and 2000 <= int(year) <= 2099:
+            return f"{year}-{MONTH[stamp.group(1).title()]}"
+    return ""
+
+
+def kind_from_url(url: str) -> str:
+    path = unquote(urlparse(url).path)
+    if SKIP_RE.search(path):
         return ""
-    return f"{match.group(1)}-{MONTH[match.group(2).title()]}"
+    low = path.lower()
+    if "result" in low or re.search(r"/[bsgpd]\.pdf$", low):
+        return "result"
+    if "timetable" in low or "namelist" in low or "考生" in path:
+        return "timetable"
+    return ""
 
 
 def short_month(session: str) -> str:
@@ -110,7 +150,7 @@ def listing_urls() -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
     for href in HREF_RE.findall(html):
-        url = abs_url(href)
+        url = canon_url(href)
         if ".pdf" not in url.lower():
             continue
         if url in seen:
@@ -125,7 +165,8 @@ def guessed_session_docs(use_cdx: bool) -> list[dict]:
     docs: list[dict] = []
     seen: set[str] = set()
     months = list(MONTH.keys())
-    for year in range(2010, year_now + 1):
+    # Only probe current and previous year with the modern filename; older years come from Wayback.
+    for year in range(year_now - 1, year_now + 1):
         for mon in months:
             session = f"{year}-{MONTH[mon]}"
             stamp = short_month(session)
@@ -141,24 +182,18 @@ def guessed_session_docs(use_cdx: bool) -> list[dict]:
                 docs.append({"url": extra, "session": session, "kind": kind, "wayback": False})
     if not use_cdx:
         return docs
-    for _ts, original in cdx_prefix("hstta.hktta.org.hk/html/BadgeScheme/", limit=5000):
+    for _ts, original in cdx_prefix("hstta.hktta.org.hk/html/BadgeScheme/", limit=8000):
         if ".pdf" not in original.lower():
             continue
-        session = session_from_url(original)
-        if not session:
+        url = canon_url(original)
+        session = session_from_url(url)
+        kind = kind_from_url(url)
+        if not session or not kind:
             continue
-        path = unquote(urlparse(original).path).lower()
-        kind = ""
-        if "timetable" in path or "考生名單" in path:
-            kind = "timetable"
-        elif "result" in path:
-            kind = "result"
-        else:
+        if url in seen:
             continue
-        if original in seen:
-            continue
-        seen.add(original)
-        docs.append({"url": original, "session": session, "kind": kind, "wayback": True})
+        seen.add(url)
+        docs.append({"url": url, "session": session, "kind": kind, "wayback": True})
     return docs
 
 
@@ -167,16 +202,10 @@ def related_docs(urls: list[str], use_cdx: bool) -> list[dict]:
     seen: set[str] = set()
     folders: set[tuple[str, str]] = set()
     for url in urls:
+        url = canon_url(url)
         session = session_from_url(url)
-        if not session:
-            continue
-        path = unquote(urlparse(url).path)
-        kind = ""
-        if "timetable" in path.lower() or "考生名單" in path:
-            kind = "timetable"
-        elif "result" in path.lower():
-            kind = "result"
-        else:
+        kind = kind_from_url(url)
+        if not session or not kind:
             continue
         if url not in seen:
             seen.add(url)
@@ -218,9 +247,16 @@ def pdf_text(path: Path) -> str:
 
 def badge_from_filename(url: str) -> str:
     path = unquote(urlparse(url).path)
+    low = path.lower()
     for key, label in FILE_BADGE.items():
-        if key in path and "Result" in path:
+        if key.lower() in low and "result" in low:
             return label
+    match = re.search(r"(?:result.*/|result[_-]web[_-]|result_)([bsgpd])(?:[_-]|\.pdf)", path, re.I)
+    if match:
+        return FILE_BADGE[f"_{match.group(1).upper()}"]
+    match = re.search(r"/([bsgpd])\.pdf$", path, re.I)
+    if match and "result" in low:
+        return FILE_BADGE[f"_{match.group(1).upper()}"]
     return ""
 
 
@@ -228,10 +264,14 @@ def parse_timetable(text: str, meta: dict) -> list[dict]:
     rows = []
     for raw in text.splitlines():
         line = re.sub(r"[ \t]+", " ", raw).strip()
-        match = NAME_RE.match(line)
-        if not match:
+        compact = NAME_COMPACT_RE.match(line)
+        spaced = None if compact else NAME_SPACED_RE.match(line)
+        if compact:
+            code, name = compact.group(1).upper(), compact.group(2)
+        elif spaced:
+            code, name = f"{spaced.group(1).upper()}{spaced.group(2)}", spaced.group(3)
+        else:
             continue
-        code, name = match.group(1).upper(), match.group(2)
         label_match = BADGE_LABEL_RE.search(line)
         rows.append(
             {
@@ -256,7 +296,7 @@ def parse_results(text: str, meta: dict) -> dict[str, dict]:
             continue
         if "考獲" not in line and "未達合格" not in line and "缺席" not in line:
             continue
-        code = found[0].group(1).upper()
+        code = (found[0].group(1) + found[0].group(2)).upper()
         passed = "考獲" in line
         pass_match = PASS_RE.search(line)
         badge = (pass_match.group(1) if pass_match else file_badge) or file_badge
@@ -328,11 +368,19 @@ def main() -> None:
     miss = load_miss()
     known = known_badge_urls(old)
     listed = listing_urls()
-    listed_set = set(listed)
+    listed_set = {canon_url(url) for url in listed}
     print(f"listing pdfs: {len(listed)}")
-    use_cdx = archive_state.due("badgeCdx", days=7)
+    years = {
+        str(rec.get("session") or "")[:4]
+        for recs in (old.get("players") or {}).values()
+        for rec in recs
+    }
+    need_history = not any(year and year < "2025" for year in years)
+    use_cdx = need_history or archive_state.due("badgeCdx", days=7)
     if not use_cdx:
         print("skip Wayback CDX (ran within 7 days)")
+    elif need_history:
+        print("Wayback CDX forced (no pre-2025 badge sessions yet)")
     docs = related_docs(listed, use_cdx)
     if use_cdx:
         archive_state.mark("badgeCdx")
