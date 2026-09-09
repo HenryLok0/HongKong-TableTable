@@ -1622,9 +1622,17 @@ function lcsdPlaceLabel(place) {
 }
 
 function latestLcsdResult(records) {
-  return [...records]
-    .filter((r) => r.kind === "result" && r.place)
-    .sort((a, b) => recYear(b) - recYear(a))[0] || null;
+  const rows = (records || []).filter((r) => r.kind === "result" && r.place);
+  if (!rows.length) return null;
+  const maxYear = Math.max(...rows.map((r) => recYear(r)), 0);
+  const latest = maxYear ? rows.filter((r) => recYear(r) === maxYear) : rows;
+  latest.sort((a, b) => {
+    const groupA = a.group ? 1 : 0;
+    const groupB = b.group ? 1 : 0;
+    if (groupB !== groupA) return groupB - groupA;
+    return Number(a.place) - Number(b.place);
+  });
+  return latest[0];
 }
 
 function badgeId(label) {
@@ -1708,10 +1716,8 @@ function renderLcsd(records) {
   const latest = latestLcsdResult(sorted);
   let title = "康文署地區分齡紀錄";
   if (latest) {
-    const extra = [latest.district, latest.year, latest.group, lcsdPlaceLabel(latest.place)]
-      .filter(Boolean)
-      .join(" ");
-    title += `（最近成績：${extra}）`;
+    const extra = [latest.group, lcsdPlaceLabel(latest.place)].filter(Boolean).join(" ");
+    if (extra) title += `（${extra}）`;
   }
   const items = sorted
     .map((r) => {
