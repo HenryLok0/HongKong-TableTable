@@ -1621,6 +1621,22 @@ function lcsdPlaceLabel(place) {
   return "";
 }
 
+function lcsdPlaceTone(place) {
+  const n = Number(place);
+  if (n === 1) return "hs-g";
+  if (n === 2) return "hs-s";
+  if (n === 3) return "hs-b";
+  if (n === 4) return "medal-4";
+  return "";
+}
+
+function lcsdPlaceChip(place, group) {
+  const label = lcsdPlaceLabel(place);
+  if (!label) return "";
+  const text = [group, label].filter(Boolean).join(" ");
+  return `<span class="badge ${lcsdPlaceTone(place)}">${escapeHtml(text)}</span>`;
+}
+
 function latestLcsdResult(records) {
   const rows = (records || []).filter((r) => r.kind === "result" && r.place);
   if (!rows.length) return null;
@@ -1714,20 +1730,15 @@ function renderLcsd(records) {
   if (!records.length) return "";
   const sorted = [...records].sort((a, b) => recYear(b) - recYear(a));
   const latest = latestLcsdResult(sorted);
-  let title = "康文署地區分齡紀錄";
-  if (latest) {
-    const extra = [latest.group, lcsdPlaceLabel(latest.place)].filter(Boolean).join(" ");
-    if (extra) title += `（${extra}）`;
-  }
+  const titleChip = latest ? ` ${lcsdPlaceChip(latest.place, latest.group)}` : "";
   const items = sorted
     .map((r) => {
       const bits = [r.district, r.year, lcsdKindLabel(r.kind), r.group].filter(Boolean);
-      const place = r.kind === "result" ? lcsdPlaceLabel(r.place) : "";
-      const label = place ? `${bits.join(" · ")}（${place}）` : bits.join(" · ");
-      return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a></li>`;
+      const chip = r.kind === "result" ? lcsdPlaceChip(r.place) : "";
+      return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a>${chip}</li>`;
     })
     .join("");
-  return `<div class="lcsd-box"><span>${escapeHtml(title)}</span><ul>${items}</ul></div>`;
+  return `<div class="lcsd-box"><span>康文署地區分齡紀錄${titleChip}</span><ul>${items}</ul></div>`;
 }
 
 function genderBadge(item) {
