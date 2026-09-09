@@ -1612,6 +1612,21 @@ function lcsdKindLabel(kind) {
   return kind || "文件";
 }
 
+function lcsdPlaceLabel(place) {
+  const n = Number(place);
+  if (n === 1) return "冠軍";
+  if (n === 2) return "亞軍";
+  if (n === 3) return "季軍";
+  if (n === 4) return "殿軍";
+  return "";
+}
+
+function latestLcsdResult(records) {
+  return [...records]
+    .filter((r) => r.kind === "result" && r.place)
+    .sort((a, b) => recYear(b) - recYear(a))[0] || null;
+}
+
 function badgeId(label) {
   const text = String(label || "");
   if (text.includes("鑽章（二）") || text.includes("鑽章(二)")) return "d2";
@@ -1689,14 +1704,24 @@ function renderBadges(records) {
 
 function renderLcsd(records) {
   if (!records.length) return "";
-  const items = [...records]
-    .sort((a, b) => recYear(b) - recYear(a))
+  const sorted = [...records].sort((a, b) => recYear(b) - recYear(a));
+  const latest = latestLcsdResult(sorted);
+  let title = "康文署地區分齡紀錄";
+  if (latest) {
+    const extra = [latest.district, latest.year, latest.group, lcsdPlaceLabel(latest.place)]
+      .filter(Boolean)
+      .join(" ");
+    title += `（最近成績：${extra}）`;
+  }
+  const items = sorted
     .map((r) => {
       const bits = [r.district, r.year, lcsdKindLabel(r.kind), r.group].filter(Boolean);
-      return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a></li>`;
+      const place = r.kind === "result" ? lcsdPlaceLabel(r.place) : "";
+      const label = place ? `${bits.join(" · ")}（${place}）` : bits.join(" · ");
+      return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a></li>`;
     })
     .join("");
-  return `<div class="lcsd-box"><span>康文署地區分齡紀錄</span><ul>${items}</ul></div>`;
+  return `<div class="lcsd-box"><span>${escapeHtml(title)}</span><ul>${items}</ul></div>`;
 }
 
 function genderBadge(item) {

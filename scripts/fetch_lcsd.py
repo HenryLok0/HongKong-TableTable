@@ -310,6 +310,66 @@ def extract_names(text: str) -> list[tuple[str, str]]:
     return list(found.items())
 
 
+def _cell_text(value: object) -> str:
+    return str(value or "").replace("\n", " ").strip()
+
+
+def _place_columns(row: list) -> list[tuple[int, int]]:
+    found: list[tuple[int, int]] = []
+    for idx, cell in enumerate(row):
+        text = _cell_text(cell)
+        if "冠軍" in text or "第一名" in text:
+            found.append((idx, 1))
+        elif "亞軍" in text or "第二名" in text or "1st Runner" in text:
+            found.append((idx, 2))
+        elif "季軍" in text or "第三名" in text or "2nd Runner" in text:
+            found.append((idx, 3))
+        elif "殿軍" in text or "第四名" in text or "3rd Runner" in text:
+            found.append((idx, 4))
+    seen: set[int] = set()
+    unique: list[tuple[int, int]] = []
+    for idx, place in found:
+        if place in seen:
+            continue
+        seen.add(place)
+        unique.append((idx, place))
+    return unique
+
+
+def extract_result_places(pdf) -> dict[str, dict]:
+    """Best placing per name from winner-list tables (1=champion ... 4=fourth)."""
+    out: dict[str, dict] = {}
+    for page in pdf.pages:
+        for table in page.extract_tables() or []:
+            place_cols: list[tuple[int, int]] = []
+            header_end = 0
+            for row_idx, row in enumerate(table[:5]):
+                cols = _place_columns(row)
+                if len(cols) >= 2:
+                    place_cols = cols
+                    header_end = row_idx
+            if not place_cols:
+                continue
+            current_group = ""
+            for row in table[header_end + 1 :]:
+                for cell in row:
+                    match = GROUP_RE.search(_cell_text(cell))
+                    if match:
+                        current_group = match.group(1)
+                        break
+                for col_idx, place in place_cols:
+                    if col_idx >= len(row):
+                        continue
+                    for name in NAME_RE.findall(_cell_text(row[col_idx])):
+                        if not is_person_name(name):
+                            continue
+                        prev = out.get(name)
+                        if prev and prev["place"] <= place:
+                            continue
+                        out[name] = {"place": place, "group": current_group}
+    return out
+
+
 def enrich_from_text(meta: dict, text: str) -> dict:
     out = dict(meta)
     if not out.get("district"):
@@ -329,27 +389,41 @@ def parse_pdf(path: Path, meta: dict) -> tuple[list[dict], dict[str, dict], dict
     import pdfplumber
 
     chunks = []
+    kind = meta.get("kind") or kind_from_url(meta.get("url") or "")
+    places: dict[str, dict] = {}
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
             chunks.append(page.extract_text() or "")
+        if kind == "result":
+            places = extract_result_places(pdf)
     text = "\n".join(chunks)
     meta = enrich_from_text(meta, text)
     ages = extract_group_ages(text)
-    records = []
+    by_name: dict[str, dict] = {}
     for name, group in extract_names(text):
-        records.append(
-            {
-                "name": name,
-                "norm": normalize_name(name),
-                "group": group,
-                "district": meta.get("district") or "",
-                "year": meta.get("year") or "",
-                "kind": meta.get("kind") or kind_from_url(meta["url"]),
-                "event": meta.get("event") or "",
-                "url": meta["url"],
-                **group_age_fields(group, ages),
-            }
-        )
+        by_name[name] = {"group": group}
+    for name, info in places.items():
+        row = by_name.setdefault(name, {"group": ""})
+        if info.get("group"):
+            row["group"] = info["group"]
+        row["place"] = info["place"]
+    records = []
+    for name, info in by_name.items():
+        group = info.get("group") or ""
+        rec = {
+            "name": name,
+            "norm": normalize_name(name),
+            "group": group,
+            "district": meta.get("district") or "",
+            "year": meta.get("year") or "",
+            "kind": meta.get("kind") or kind_from_url(meta["url"]),
+            "event": meta.get("event") or "",
+            "url": meta["url"],
+            **group_age_fields(group, ages),
+        }
+        if info.get("place"):
+            rec["place"] = info["place"]
+        records.append(rec)
     return records, ages, meta
 
 
@@ -503,6 +577,8 @@ def main() -> None:
                     "event": rec["event"],
                     "url": rec["url"],
                 }
+                if rec.get("place"):
+                    row["place"] = rec["place"]
                 if "ageMin" in rec:
                     row["ageMin"] = rec["ageMin"]
                     row["ageMax"] = rec["ageMax"]
@@ -550,5 +626,70 @@ def main() -> None:
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size} bytes, {len(players)} names)")
 
 
+def refresh_result_places() -> None:
+    """Re-read existing result PDFs and stamp champion/runner-up place onto records."""
+    import pdfplumber
+
+    if not OUT_PATH.exists():
+        print("missing lcsd.json")
+        return
+    data = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    urls: list[str] = []
+    seen: set[str] = set()
+    for recs in (data.get("players") or {}).values():
+        for rec in recs or []:
+            if rec.get("kind") != "result":
+                continue
+            url = rec.get("url") or ""
+            if url and url not in seen:
+                seen.add(url)
+                urls.append(url)
+    print(f"result pdfs: {len(urls)}")
+    url_places: dict[str, dict[str, dict]] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        for i, url in enumerate(urls, 1):
+            print(f"[{i}/{len(urls)}] {url}")
+            body = get_pdf(url, referer=PORTAL_URL)
+            if not body:
+                print("  skip (no pdf)")
+                continue
+            path = tmp_dir / f"{i}.pdf"
+            path.write_bytes(body)
+            try:
+                with pdfplumber.open(path) as pdf:
+                    url_places[url] = extract_result_places(pdf)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  parse error: {exc}")
+                continue
+            print(f"  placed {len(url_places[url])}")
+
+    updated = 0
+    filled_group = 0
+    for key, recs in (data.get("players") or {}).items():
+        for rec in recs or []:
+            places = url_places.get(rec.get("url") or "") or {}
+            by_norm = {normalize_name(name): info for name, info in places.items()}
+            info = by_norm.get(normalize_name(rec.get("name") or "")) or by_norm.get(key)
+            if not info:
+                continue
+            if rec.get("place") != info["place"]:
+                rec["place"] = info["place"]
+                updated += 1
+            elif "place" not in rec:
+                rec["place"] = info["place"]
+                updated += 1
+            if info.get("group") and not rec.get("group"):
+                rec["group"] = info["group"]
+                filled_group += 1
+
+    data["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
+    OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"stamped place on {updated} rows, filled group {filled_group}")
+
+
 if __name__ == "__main__":
-    main()
+    if "--places" in sys.argv:
+        refresh_result_places()
+    else:
+        main()
