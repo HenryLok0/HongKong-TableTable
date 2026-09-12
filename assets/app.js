@@ -1784,10 +1784,7 @@ function renderLcsd(records) {
     })
     .join("");
   const title = `康文署地區分齡紀錄（${sorted.length} 項）`;
-  if (sorted.length === 1) {
-    return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${items}</ul></div>`;
-  }
-  return `<div class="lcsd-box"><details><summary>${escapeHtml(title)}${titleChip}</summary><ul>${items}</ul></details></div>`;
+  return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${items}</ul></div>`;
 }
 
 function genderBadge(item) {
