@@ -12,6 +12,8 @@ const BUCKETS = [
 ];
 
 const OPEN = Infinity;
+const MAX_NAMES = 400;
+const SEARCH_LABEL = "查詢名單";
 
 const AGE_BANDS = [
   { id: "65+", min: 65, max: OPEN, label: "65歲或以上" },
@@ -234,6 +236,7 @@ let hkttaHistory = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
+let displayResults = [];
 let nameStats = {
   gender: new Map(),
   givenAge: new Map(),
@@ -1637,6 +1640,48 @@ function lcsdPlaceChip(place, group) {
   return `<span class="badge ${lcsdPlaceTone(place)}">${escapeHtml(text)}</span>`;
 }
 
+function lcsdIsFixture(rec) {
+  const url = String(rec.url || "").toLowerCase();
+  return /fixture/.test(url) || /_draw/.test(url) || /draw_/.test(url);
+}
+
+function lcsdLangRank(url) {
+  const text = String(url || "").toLowerCase();
+  if (text.includes("/en/") || text.includes("_en_")) return 0;
+  if (text.includes("/b5/") || text.includes("_b5_")) return 2;
+  return 1;
+}
+
+function lcsdRowScore(rec) {
+  const place = Number(rec.place);
+  return (rec.place ? 20 : 0)
+    + (rec.group ? 8 : 0)
+    + (rec.district ? 2 : 0)
+    + lcsdLangRank(rec.url)
+    + (Number.isFinite(place) ? Math.max(0, 5 - place) : 0);
+}
+
+function lcsdMergeKey(rec) {
+  const kind = rec.kind === "result" && rec.place ? "result" : (rec.kind || "other");
+  if (rec.district || rec.year) return `${rec.district || ""}|${rec.year || ""}|${kind}`;
+  return String(rec.url || "");
+}
+
+function visibleLcsdRecords(records) {
+  const byKey = new Map();
+  for (const rec of records || []) {
+    if (lcsdIsFixture(rec)) continue;
+    const key = lcsdMergeKey(rec);
+    const prev = byKey.get(key);
+    if (!prev || lcsdRowScore(rec) > lcsdRowScore(prev)) byKey.set(key, rec);
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const years = recYear(b) - recYear(a);
+    if (years) return years;
+    return String(a.district || "").localeCompare(String(b.district || ""), "zh-HK");
+  });
+}
+
 function latestLcsdResult(records) {
   const rows = (records || []).filter((r) => r.kind === "result" && r.place);
   if (!rows.length) return null;
@@ -1727,8 +1772,8 @@ function renderBadges(records) {
 }
 
 function renderLcsd(records) {
-  if (!records.length) return "";
-  const sorted = [...records].sort((a, b) => recYear(b) - recYear(a));
+  const sorted = visibleLcsdRecords(records);
+  if (!sorted.length) return "";
   const latest = latestLcsdResult(sorted);
   const titleChip = latest ? ` ${lcsdPlaceChip(latest.place, latest.group)}` : "";
   const items = sorted
@@ -1738,7 +1783,11 @@ function renderLcsd(records) {
       return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a>${chip}</li>`;
     })
     .join("");
-  return `<div class="lcsd-box"><span>康文署地區分齡紀錄${titleChip}</span><ul>${items}</ul></div>`;
+  const title = `康文署地區分齡紀錄（${sorted.length} 項）`;
+  if (sorted.length === 1) {
+    return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${items}</ul></div>`;
+  }
+  return `<div class="lcsd-box"><details><summary>${escapeHtml(title)}${titleChip}</summary><ul>${items}</ul></details></div>`;
 }
 
 function genderBadge(item) {
@@ -2177,12 +2226,7 @@ function updateStats(results) {
   `;
 }
 
-function renderResults() {
-  if (!lastResults.length) return;
-  buildFilters(lastResults);
-  document.getElementById("breakdown").classList.remove("hidden");
-  updateStats(lastResults);
-
+function orderedResults() {
   const filtered = lastResults.filter(passesFilter);
   const mode = sortMode();
   const sorted = filtered.map((item) => ({ item, listIndex: lastResults.indexOf(item) }));
@@ -2191,6 +2235,18 @@ function renderResults() {
   } else {
     sorted.sort((a, b) => a.listIndex - b.listIndex);
   }
+  return sorted;
+}
+
+function renderResults() {
+  if (!lastResults.length) return;
+  buildFilters(lastResults);
+  document.getElementById("breakdown").classList.remove("hidden");
+  updateStats(lastResults);
+
+  const sorted = orderedResults();
+  displayResults = sorted.map(({ item }) => item);
+  const mode = sortMode();
 
   const strengthOrder = [...lastResults]
     .sort(compareByListRank)
@@ -2205,14 +2261,14 @@ function renderResults() {
       return renderCard(item, snapshot.totals, label);
     })
     .join("") || `<p class="hint">呢組篩選冇符合嘅球員。</p>`;
-  fillExportTable(sorted.map(({ item }) => item));
+  fillExportTable(displayResults);
   const status = document.getElementById("filter-status");
   if (status) {
     const picked = [...document.querySelectorAll("#filter-box input:checked")].map((el) => el.getAttribute("data-label"));
     if (!picked.length) {
       status.textContent = `顯示全部 ${lastResults.length} 人`;
     } else {
-      status.textContent = `已剔：${picked.join("、")} · 顯示 ${filtered.length}／${lastResults.length} 人`;
+      status.textContent = `已剔：${picked.join("、")} · 顯示 ${sorted.length}／${lastResults.length} 人`;
     }
   }
 }
@@ -2248,10 +2304,24 @@ async function logSearch(names) {
   }
 }
 
+function setSearchStatus(text) {
+  const el = document.getElementById("search-status");
+  if (el) el.textContent = text || "";
+}
+
+function setSearchBusy(busy) {
+  const btn = document.getElementById("search-btn");
+  if (!btn) return;
+  btn.disabled = Boolean(busy);
+  btn.textContent = busy ? "查緊…" : SEARCH_LABEL;
+}
+
 async function runSearch() {
-  const names = parseNames(document.getElementById("names").value);
-  if (!names.length) {
+  const parsed = parseNames(document.getElementById("names").value);
+  if (!parsed.length) {
     lastResults = [];
+    displayResults = [];
+    setSearchStatus("");
     setNamesEditorOpen(true);
     document.getElementById("summary").classList.add("hidden");
     document.getElementById("breakdown").classList.add("hidden");
@@ -2260,40 +2330,48 @@ async function runSearch() {
     syncShareUrl([]).catch(() => {});
     return;
   }
-  if (edgeLookup) {
-    try {
-      const res = await fetch(apiUrl("api/lookup"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ names, log: !shareParams().skipLog }),
-      });
-      if (!res.ok) throw new Error(res.statusText);
-      applyLookupData(await res.json());
-      setNamesEditorOpen(false);
-      renderResults();
-      syncShareUrl(names).catch(() => {});
-      logSearch(names);
-      return;
-    } catch (err) {
-      console.error(err);
-      edgeLookup = false;
+  const truncated = parsed.length > MAX_NAMES;
+  const names = parsed.slice(0, MAX_NAMES);
+  setSearchStatus(truncated ? `名單有 ${parsed.length} 人，每次最多查 ${MAX_NAMES} 個，已只查頭 ${MAX_NAMES} 個。` : "");
+  setSearchBusy(true);
+  try {
+    if (edgeLookup) {
+      try {
+        const res = await fetch(apiUrl("api/lookup"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ names, log: !shareParams().skipLog }),
+        });
+        if (!res.ok) throw new Error(res.statusText);
+        applyLookupData(await res.json());
+        setNamesEditorOpen(false);
+        renderResults();
+        syncShareUrl(names).catch(() => {});
+        logSearch(names);
+        return;
+      } catch (err) {
+        console.error(err);
+        edgeLookup = false;
+      }
     }
+    lastResults = names.map((query) => {
+      const matches = findMatches(query);
+      return {
+        query,
+        matches,
+        possible: matches.length ? [] : findPossible(query),
+        lcsd: findLcsd(query),
+        badges: findBadges(query),
+        hkttaPast: findHkttaPast(query),
+      };
+    });
+    setNamesEditorOpen(false);
+    renderResults();
+    syncShareUrl(names).catch(() => {});
+    logSearch(names);
+  } finally {
+    setSearchBusy(false);
   }
-  lastResults = names.map((query) => {
-    const matches = findMatches(query);
-    return {
-      query,
-      matches,
-      possible: matches.length ? [] : findPossible(query),
-      lcsd: findLcsd(query),
-      badges: findBadges(query),
-      hkttaPast: findHkttaPast(query),
-    };
-  });
-  setNamesEditorOpen(false);
-  renderResults();
-  syncShareUrl(names).catch(() => {});
-  logSearch(names);
 }
 
 function applyTheme(dark) {
@@ -2385,7 +2463,7 @@ function setExportStatus(text) {
 }
 
 async function copyResultsTable() {
-  const items = lastResults.filter(passesFilter);
+  const items = displayResults.length ? displayResults : orderedResults().map(({ item }) => item);
   if (!items.length) {
     setExportStatus("冇結果可以複製。");
     return;
@@ -2400,7 +2478,7 @@ async function copyResultsTable() {
 }
 
 function printResultsTable() {
-  const items = lastResults.filter(passesFilter);
+  const items = displayResults.length ? displayResults : orderedResults().map(({ item }) => item);
   if (!items.length) {
     setExportStatus("冇結果可以列印。");
     return;
@@ -2414,6 +2492,10 @@ function bootSettings() {
   const guessEl = document.getElementById("guess-gender");
   const pref = themePreference(saved);
   guessEl.checked = Boolean(saved.guessGender);
+  const sort = saved.sortMode === "list" || saved.sortMode === "rank" ? saved.sortMode : "rank";
+  document.querySelectorAll('input[name="sort-mode"]').forEach((el) => {
+    el.checked = el.value === sort;
+  });
   syncThemeRadios(pref);
   applyThemePreference(pref);
 
@@ -2535,7 +2617,9 @@ function bindUi() {
   document.getElementById("clear-btn").addEventListener("click", () => {
     document.getElementById("names").value = "";
     lastResults = [];
+    displayResults = [];
     setShareStatus("");
+    setSearchStatus("");
     setExportStatus("");
     fillExportTable([]);
     syncShareUrl([]);
@@ -2545,6 +2629,9 @@ function bindUi() {
     document.getElementById("results").innerHTML = "";
   });
   document.getElementById("breakdown").addEventListener("change", (event) => {
+    if (event.target.matches("input[name='sort-mode']")) {
+      saveSettings({ sortMode: event.target.value });
+    }
     if (event.target.matches("input")) renderResults();
   });
   document.getElementById("breakdown").addEventListener("click", (event) => {

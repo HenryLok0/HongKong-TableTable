@@ -288,6 +288,11 @@ button.ghost {
   border: 1px solid var(--line);
 }
 
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .hint {
   margin: 12px 0 0;
   font-size: 14px;
@@ -622,6 +627,10 @@ button.ghost {
 }
 
 .lcsd-box summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
   font-size: 12px;
   color: var(--muted);
