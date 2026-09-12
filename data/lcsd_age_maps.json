@@ -2768,6 +2768,41 @@
           "ageMin": 35,
           "ageMax": 49,
           "doubles": false
+        },
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
         }
       }
     },
@@ -6767,5 +6802,5 @@
       }
     }
   },
-  "updated": "2026-09-12 03:17"
+  "updated": "2026-09-12 16:48"
 }
