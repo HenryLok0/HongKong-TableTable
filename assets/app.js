@@ -2189,11 +2189,7 @@ function renderResults() {
   if (mode === "rank") {
     sorted.sort((a, b) => compareByListRank(a.item, b.item));
   } else {
-    sorted.sort((a, b) => {
-      const dataDiff = Number(hasRecord(b.item)) - Number(hasRecord(a.item));
-      if (dataDiff) return dataDiff;
-      return a.listIndex - b.listIndex;
-    });
+    sorted.sort((a, b) => a.listIndex - b.listIndex);
   }
 
   const strengthOrder = [...lastResults]
