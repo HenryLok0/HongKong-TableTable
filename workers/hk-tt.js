@@ -306,25 +306,48 @@ function formatHkt(ms) {
   return new Date(ms).toLocaleString("zh-HK", { timeZone: "Asia/Hong_Kong", hour12: false });
 }
 
-async function readQueryLogs(env) {
-  const rows = [];
+async function listAllKeys(env, opts = {}) {
+  const keys = [];
   let cursor;
   do {
-    const page = await env.LINKS.list({ prefix: QUERY_PREFIX, limit: 100, cursor });
-    for (const key of page.keys) {
-      const raw = await env.LINKS.get(key.name);
+    const page = await env.LINKS.list({ limit: 1000, cursor, ...opts });
+    keys.push(...page.keys);
+    cursor = page.list_complete ? "" : page.cursor;
+  } while (cursor);
+  return keys;
+}
+
+async function readQueryLogs(env, keyNames) {
+  const names = (keyNames || (await listAllKeys(env, { prefix: QUERY_PREFIX })).map((key) => key.name))
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, QUERY_LOG_LIMIT);
+  const rows = [];
+  for (let i = 0; i < names.length; i += 50) {
+    const chunk = names.slice(i, i + 50);
+    const got = await Promise.all(chunk.map(async (name) => ({ name, raw: await env.LINKS.get(name) })));
+    for (const { name, raw } of got) {
       if (!raw) continue;
       try {
         const row = JSON.parse(raw);
-        if (Array.isArray(row.names) && row.names.length) rows.push({ ...row, key: key.name });
+        if (Array.isArray(row.names) && row.names.length) rows.push({ ...row, key: name });
       } catch {
         // Skip bad rows.
       }
     }
-    cursor = page.list_complete ? "" : page.cursor;
-  } while (cursor && rows.length < QUERY_LOG_LIMIT * 2);
+  }
   rows.sort((a, b) => (b.at || 0) - (a.at || 0));
   return rows.slice(0, QUERY_LOG_LIMIT);
+}
+
+async function adminKvIndex(env) {
+  const keys = await listAllKeys(env);
+  const qKeys = [];
+  let shortCount = 0;
+  for (const key of keys) {
+    if (key.name.startsWith(QUERY_PREFIX)) qKeys.push(key.name);
+    else shortCount += 1;
+  }
+  return { qKeys, shortCount };
 }
 
 async function deleteAllQueryLogs(env) {
@@ -474,19 +497,6 @@ function resultHrefS(name) {
   params.set("s", `1${toBase64Url(namesToBytes([name]))}`);
   params.set("log", "0");
   return `/?${params}`;
-}
-
-async function countShortKeys(env) {
-  let n = 0;
-  let cursor;
-  do {
-    const page = await env.LINKS.list({ limit: 1000, cursor });
-    for (const key of page.keys) {
-      if (!key.name.startsWith(QUERY_PREFIX)) n += 1;
-    }
-    cursor = page.list_complete ? "" : page.cursor;
-  } while (cursor);
-  return n;
 }
 
 function snapshotDelta(now, prev) {
@@ -1208,11 +1218,12 @@ export default {
       if (!env.LINKS) {
         return new Response("LINKS kv missing", { status: 503 });
       }
-      const [rows, shortCount, snaps] = await Promise.all([
-        readQueryLogs(env),
-        countShortKeys(env),
+      const [index, snaps] = await Promise.all([
+        adminKvIndex(env),
         loadSnapshots(),
       ]);
+      const rows = await readQueryLogs(env, index.qKeys);
+      const shortCount = index.shortCount;
       const headers = {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
