@@ -1763,6 +1763,8 @@ function renderBadges(records) {
       if (r.passed === true) status = "考獲資格";
       else if (r.absent) status = "缺席";
       else if (r.passed === false) status = "未合格";
+      else if (r.waitResult) status = "成績未公布";
+      else status = "成績單未見編號";
       const bits = [r.session, r.badge, status].filter(Boolean);
       const href = r.listUrl || r.url;
       return `<li><a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a></li>`;

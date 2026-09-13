@@ -44,7 +44,7 @@ SKIP_RE = re.compile(
     r"schoolapp|prevention|arrangement|exammarks|nonreg",
     re.I,
 )
-CODE_RE = re.compile(r"\b([BSGPD][A-Z]{0,3})\s*(\d+)\b")
+CODE_RE = re.compile(r"(?:^|[\s（(])(?:\d)?([BSGPD][A-Z]{0,3})\s*(\d+)\b")
 NAME_COMPACT_RE = re.compile(r"^([BSGPD][A-Z]{0,3}\d+)\s+([\u4e00-\u9fff]{2,4})\b")
 NAME_SPACED_RE = re.compile(
     r"^(?:\d)?([BSGPD][A-Z]{0,3})\s+(\d+)\s+([\u4e00-\u9fff]{2,4})\b"
@@ -141,6 +141,26 @@ def short_month(session: str) -> str:
     return f"{names[month]}-{year[2:]}"
 
 
+def result_guess_urls(session: str) -> list[str]:
+    year, month = session.split("-")
+    mon = {v: k for k, v in MONTH.items()}[month]
+    stamp = short_month(session)
+    base = f"https://hstta.hktta.org.hk/html/BadgeScheme/{year}/{mon}/"
+    root = f"https://hstta.hktta.org.hk/html/BadgeScheme/{year}/"
+    urls: list[str] = []
+    for letter in "BSGPD":
+        urls.extend(
+            [
+                f"{base}Result (for web)_{letter} ({stamp}).pdf",
+                f"{base}Result (for web)_{letter}.pdf",
+                f"{base}Result_{letter}.pdf",
+                f"{base}{mon}{year}_BS_Result_{letter}.pdf",
+                f"{root}Result_{letter}.pdf",
+            ]
+        )
+    return urls
+
+
 def listing_urls() -> list[str]:
     code, body = http_get(LISTING)
     if code != 200:
@@ -172,8 +192,7 @@ def guessed_session_docs(use_cdx: bool) -> list[dict]:
             stamp = short_month(session)
             base = f"https://hstta.hktta.org.hk/html/BadgeScheme/{year}/{mon}/"
             extras = [f"{base}Timetable for web ({stamp}).pdf"]
-            for letter in "BSGPD":
-                extras.append(f"{base}Result (for web)_{letter} ({stamp}).pdf")
+            extras.extend(result_guess_urls(session))
             for extra in extras:
                 if extra in seen:
                     continue
@@ -219,8 +238,7 @@ def related_docs(urls: list[str], use_cdx: bool) -> list[dict]:
         stamp = short_month(session)
         base = f"https://hstta.hktta.org.hk/html/BadgeScheme/{year}/{mon}/"
         extras = [f"{base}Timetable for web ({stamp}).pdf"]
-        for letter in "BSGPD":
-            extras.append(f"{base}Result (for web)_{letter} ({stamp}).pdf")
+        extras.extend(result_guess_urls(session))
         for extra in extras:
             if extra in seen:
                 continue
@@ -325,6 +343,7 @@ def merge_players(sittings: list[dict], results: dict[tuple[str, str], dict]) ->
             "session": row["session"],
             "passed": result["passed"] if result else None,
             "absent": result["absent"] if result else False,
+            "waitResult": result is None,
             "url": (result or row)["url"],
             "listUrl": row["url"],
         }
@@ -332,6 +351,39 @@ def merge_players(sittings: list[dict], results: dict[tuple[str, str], dict]) ->
         if key not in existing:
             players[row["norm"]].append(item)
     return players
+
+
+def overlay_results(players: dict, results: dict[tuple[str, str], dict]) -> int:
+    filled = 0
+    for recs in players.values():
+        for rec in recs:
+            result = results.get((rec.get("session"), rec.get("code")))
+            if not result:
+                continue
+            was_null = rec.get("passed") is None
+            rec["passed"] = result["passed"]
+            rec["absent"] = result["absent"]
+            rec["waitResult"] = False
+            rec["url"] = result["url"]
+            if result.get("badge"):
+                rec["badge"] = result["badge"]
+            if was_null:
+                filled += 1
+    return filled
+
+
+def stamp_wait_result(players: dict) -> None:
+    has_outcome: set[str] = set()
+    for recs in players.values():
+        for rec in recs:
+            if rec.get("passed") is True or rec.get("passed") is False or rec.get("absent"):
+                has_outcome.add(rec.get("session") or "")
+    for recs in players.values():
+        for rec in recs:
+            if rec.get("passed") is None:
+                rec["waitResult"] = (rec.get("session") or "") not in has_outcome
+            else:
+                rec["waitResult"] = False
 
 
 def load_miss() -> set[str]:
@@ -443,6 +495,10 @@ def main() -> None:
                     kept += 1
         print(f"kept {kept} historical badge rows")
 
+    filled = overlay_results(players, results)
+    print(f"filled results on {filled} existing rows")
+    stamp_wait_result(players)
+
     payload = {
         "source": "恒生乒乓球學院公開章別考試（考生時間表／成績 PDF）",
         "sourceUrl": LISTING,
@@ -457,5 +513,77 @@ def main() -> None:
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size} bytes, {len(players)} names)")
 
 
+def backfill_results() -> None:
+    """Re-read result PDFs for sessions that still have unmatched timetable rows."""
+    import pdfplumber  # noqa: F401
+
+    if not OUT_PATH.exists():
+        print("missing badges.json")
+        return
+    data = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    players = data.get("players") or {}
+    sessions: set[str] = set()
+    folders: set[str] = set()
+    for recs in players.values():
+        for rec in recs:
+            if rec.get("passed") is not None:
+                continue
+            session = rec.get("session") or ""
+            if session:
+                sessions.add(session)
+            for key in ("listUrl", "url"):
+                url = rec.get(key) or ""
+                if url and "/" in url:
+                    folders.add(url.rsplit("/", 1)[0] + "/")
+    print(f"sessions needing results: {len(sessions)}")
+    urls: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for session in sorted(sessions):
+        for url in result_guess_urls(session):
+            if url not in seen:
+                seen.add(url)
+                urls.append((session, url))
+        year, month = session.split("-")
+        mon = {v: k for k, v in MONTH.items()}[month]
+        for folder in folders:
+            if f"/{year}/" not in folder and f"/{year}/{mon}/" not in folder:
+                continue
+            for letter in "BSGPD":
+                extra = f"{folder}Result_{letter}.pdf"
+                if extra not in seen:
+                    seen.add(extra)
+                    urls.append((session, extra))
+    print(f"candidate result pdfs: {len(urls)}")
+    results: dict[tuple[str, str], dict] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        for i, (session, url) in enumerate(urls, 1):
+            print(f"[{i}/{len(urls)}] {session} {url}")
+            body = get_pdf(url, referer=LISTING, wayback=True)
+            if not body:
+                print("  skip (no pdf)")
+                continue
+            path = tmp_dir / f"{i}.pdf"
+            path.write_bytes(body)
+            try:
+                text = pdf_text(path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  parse error: {exc}")
+                continue
+            mapped = parse_results(text, {"url": url, "session": session})
+            print(f"  results {len(mapped)}")
+            for cand, row in mapped.items():
+                results[(row["session"], cand)] = row
+    filled = overlay_results(players, results)
+    stamp_wait_result(players)
+    data["players"] = players
+    data["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
+    OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"filled {filled} rows, wrote {OUT_PATH}")
+
+
 if __name__ == "__main__":
-    main()
+    if "--backfill" in sys.argv:
+        backfill_results()
+    else:
+        main()
