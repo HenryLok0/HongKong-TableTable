@@ -873,26 +873,49 @@ function adminPage(rows, shortCount, snaps) {
 </html>`;
 }
 
+function recoverConflictJson(text) {
+  const raw = String(text || "");
+  if (!raw.includes("<<<<<<<")) return null;
+  const parts = raw.split(/^=======+\s*$/m);
+  const incoming = parts.length > 1 ? parts[parts.length - 1] : raw;
+  const candidate = incoming.replace(/^<<<<<<<[^\n]*\n/, "").replace(/^>>>>>>>[^\n]*\n?/m, "").trim();
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function parseOriginJson(text, file) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const recovered = recoverConflictJson(text);
+    if (recovered) return recovered;
+    throw new Error(`${file} ${err}`);
+  }
+}
+
 async function originJson(file, ctx) {
   const url = new URL(file, GITHUB_BASE).href;
   const cache = caches.default;
-  const cacheKey = new Request(url, { method: "GET" });
-  let res = await cache.match(cacheKey);
-  if (!res) {
-    res = await fetch(url, {
-      headers: { "User-Agent": "hk-tt-worker", Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`${file} ${res.status}`);
-    const cached = new Response(res.clone().body, {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": `public, max-age=${ORIGIN_JSON_MAX_AGE}`,
-      },
-    });
-    ctx.waitUntil(cache.put(cacheKey, cached));
-  }
-  return res.json();
+  const cacheKey = new Request(`https://hktt.henrylok.me/__origin/${file}?v=clean1`, { method: "GET" });
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit.json();
+  const res = await fetch(url, {
+    headers: { "User-Agent": "hk-tt-worker", Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`${file} ${res.status}`);
+  const data = parseOriginJson(await res.text(), file);
+  const cached = new Response(JSON.stringify(data), {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": `public, max-age=${ORIGIN_JSON_MAX_AGE}`,
+    },
+  });
+  ctx.waitUntil(cache.put(cacheKey, cached.clone()));
+  return data;
 }
 
 function scorePlayers(players) {

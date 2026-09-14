@@ -2350,6 +2350,10 @@ async function runSearch() {
         return;
       } catch (err) {
         console.error(err);
+        if (!snapshot.players?.length) {
+          setSearchStatus("查詢服務暫時失敗。資料檔可能未更新，請稍後再試。");
+          return;
+        }
         edgeLookup = false;
       }
     }
