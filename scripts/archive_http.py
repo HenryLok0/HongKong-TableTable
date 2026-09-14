@@ -33,14 +33,22 @@ def http_get(url: str, referer: str = "", timeout: int = 45) -> tuple[int, bytes
         return 0, b""
 
 
+def pdf_complete(body: bytes) -> bool:
+    return body.startswith(b"%PDF") and b"%%EOF" in body[-4096:]
+
+
 def get_pdf(url: str, referer: str = "", wayback: bool = True) -> bytes | None:
-    code, body = http_get(url, referer=referer)
-    if code == 200 and body.startswith(b"%PDF"):
+    code, body = http_get(url, referer=referer, timeout=90)
+    if code == 200 and pdf_complete(body):
         return body
     if wayback:
         archived = wayback_pdf(url)
-        if archived:
+        if archived and pdf_complete(archived):
             return archived
+        if archived and archived.startswith(b"%PDF") and (not body or len(archived) > len(body)):
+            return archived
+    if code == 200 and body.startswith(b"%PDF"):
+        return body
     return None
 
 
@@ -65,7 +73,7 @@ def wayback_pdf(url: str) -> bytes | None:
         ts = row[0]
         original = row[1] if len(row) > 1 else url
         snapshot = f"https://web.archive.org/web/{ts}id_/{original}"
-        got, data = http_get(snapshot)
+        got, data = http_get(snapshot, timeout=90)
         if got == 200 and data.startswith(b"%PDF"):
             return data
     return None

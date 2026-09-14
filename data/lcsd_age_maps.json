@@ -7885,7 +7885,27 @@
           "doubles": true
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/Prospectus_-_STD_DAG_Table_Tennis_Comp._2019_c.pdf": {
+      "source": "prospectus",
+      "groups": {
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
+    },
+    "沙田|2019": {
+      "source": "prospectus",
+      "groups": {
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
     }
   },
-  "updated": "2026-09-14 09:39"
+  "updated": "2026-09-14 09:59"
 }
