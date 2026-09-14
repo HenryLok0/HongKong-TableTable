@@ -23,6 +23,12 @@ EXTRA_PATH = ROOT / "data" / "lcsd_extra_urls.json"
 AGE_MAP_PATH = ROOT / "data" / "lcsd_age_maps.json"
 SEARCH_URL = "https://www.lcsd.gov.hk/clpss/tc/search/common/searchResult.do"
 PORTAL_URL = "https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do"
+LAST_URLS = (
+    "https://www.lcsd.gov.hk/clpss/tc/webApp/DagcLast.do?type=last_result",
+    "https://www.lcsd.gov.hk/clpss/en/webApp/DagcLast.do?type=last_result",
+    "https://www.lcsd.gov.hk/clpss/tc/webApp/Dagc.do",
+    "https://www.lcsd.gov.hk/clpss/en/webApp/Dagc.do",
+)
 HKT = timezone(timedelta(hours=8))
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -152,7 +158,7 @@ def parse_listing_html(html: str) -> list[dict]:
 def fetch_listing() -> list[dict]:
     events: list[dict] = []
     seen: set[str] = set()
-    for page_no in range(1, 16):
+    for page_no in range(1, 31):
         payload = urllib.parse.urlencode(
             {
                 "searchFormPath": "/webApp/Dagc",
@@ -179,11 +185,40 @@ def fetch_listing() -> list[dict]:
         print(f"listing page {page_no}: {fresh} new")
         if not batch or fresh == 0:
             break
+    for last_url in LAST_URLS:
+        last_code, last_body = http_request(last_url)
+        if last_code != 200:
+            print(f"last-result listing failed {last_url} ({last_code})")
+            continue
+        html = last_body.decode("utf-8", errors="replace")
+        batch = parse_listing_html(html)
+        if not batch:
+            for href in re.findall(r"href\s*=\s*['\"]([^'\"]+\.pdf)['\"]", html, flags=re.I):
+                url = href.strip()
+                if url.startswith("/"):
+                    url = urllib.parse.urljoin("https://www.lcsd.gov.hk", url)
+                if not TT_URL_RE.search(url):
+                    continue
+                kind = kind_from_url(url)
+                if kind not in {"schedule", "result", "prospectus"}:
+                    continue
+                if url in seen:
+                    continue
+                seen.add(url)
+                events.append(guess_lcsd_meta(url))
+                print(f"last-result extra {url}")
+        else:
+            for item in batch:
+                if item["url"] in seen:
+                    continue
+                seen.add(item["url"])
+                events.append(item)
+                print(f"last-result {item['url']}")
     return events
 
 
 TT_URL_RE = re.compile(
-    r"table[-_ ]?tennis|乒乓球|ttn|_tt[._]|/tt_|dagc.*tt",
+    r"table[-_ ]?tennis|乒乓球|ttn|_tt[._]|/tt_|dagc.*tt|TT20\d{2}",
     re.I,
 )
 
@@ -206,12 +241,18 @@ def guess_lcsd_meta(url: str) -> dict:
 def discover_wayback() -> list[dict]:
     prefixes = [
         "www.lcsd.gov.hk/ls/dagc/clpss/prop/",
+        "www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/",
+        "www.lcsd.gov.hk/ls/dagc/clpss/prop/en/",
+        "www.lcsd.gov.hk/ls/dagc/clpss/prop/last/",
         "www.lcsd.gov.hk/ls/dagc/",
+        "www.lcsd.gov.hk/clpss/",
+        "www.lcsd.gov.hk/en/ls/dagc/",
+        "www.lcsd.gov.hk/tc/ls/dagc/",
     ]
     found: list[dict] = []
     seen: set[str] = set()
     for prefix in prefixes:
-        for _ts, original in cdx_prefix(prefix, limit=8000):
+        for _ts, original in cdx_prefix(prefix, limit=20000):
             if not original.lower().endswith(".pdf"):
                 continue
             if not TT_URL_RE.search(original):
@@ -507,7 +548,7 @@ def main() -> None:
     extra = load_extra()
     seen = {d["url"] for d in docs}
     archived: list[dict] = []
-    if archive_state.due("lcsdCdx", days=7):
+    if archive_state.due("lcsdCdx", days=7) or "--force-cdx" in sys.argv:
         archived = discover_wayback()
         persist_extra(archived)
         archive_state.mark("lcsdCdx")

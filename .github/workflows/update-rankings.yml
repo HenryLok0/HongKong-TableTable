@@ -3,7 +3,6 @@ name: Update ranking data
 on:
   schedule:
     # GitHub Actions cron is UTC only. HKT is UTC+8 year-round.
-    - cron: "30 4 * * *"
     - cron: "30 16 * * *"
   workflow_dispatch:
 

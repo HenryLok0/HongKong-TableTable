@@ -423,6 +423,26 @@
           "ageMin": 0,
           "ageMax": 18,
           "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
         }
       }
     },
@@ -3003,6 +3023,21 @@
           "ageMin": 0,
           "ageMax": 18,
           "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
         }
       }
     },
@@ -6800,7 +6835,1057 @@
           "doubles": true
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/4_res_b5_al25.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/6_res_b5_Result_Devoting_ourselves_to_the_National_Games_Central_and_Western_District_Age_Group_Table_Tennis_3.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "中西區|2025": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/8_res_b5_resultsSouthern.pdf": {
+      "source": "result",
+      "groups": {
+        "MOV": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "FUN": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MO": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": false
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/18_res_b5_25kt_tt_res_tc.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "觀塘|2025": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/22_res_b5_result.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "西貢|2025": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/28_res_b5_YLD_Table_Tennis_2025-_Result.pdf": {
+      "source": "result",
+      "groups": {
+        "MAA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FAA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "元朗|2025": {
+      "source": "result",
+      "groups": {
+        "MAA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FAA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/34_res_b5_Result_2526.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "荃灣|2025": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/b5/36_res_b5_DAGC_Table_Tennis_Results_2025_2026.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/en/6_res_en_Result_Devoting_ourselves_to_the_National_Games_Central_and_Western_District_Age_Group_Table_Tennis_3.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/en/18_res_en_25kt_tt_res_tc.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/en/28_res_en_YLD_Table_Tennis_2025_Result_EN.pdf": {
+      "source": "result",
+      "groups": {
+        "MAA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FAA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/last/en/36_res_en_DAGC_Table_Tennis_Results_2025_2026.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
+    },
+    "離島|2025": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/18_pro_b5_KT_DAGC_TT2020_Chi.pdf": {
+      "source": "prospectus",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 45,
+          "ageMax": 54,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 44,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "觀塘|2020": {
+      "source": "prospectus",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 45,
+          "ageMax": 54,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 44,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/DAGC_TTN_2019_FINAL_CHIN.pdf": {
+      "source": "prospectus",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 45,
+          "ageMax": 54,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 44,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "觀塘|2019": {
+      "source": "prospectus",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 45,
+          "ageMax": 54,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 44,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
     }
   },
-  "updated": "2026-09-13 21:45"
+  "updated": "2026-09-14 08:15"
 }

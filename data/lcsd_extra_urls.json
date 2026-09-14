@@ -1006,5 +1006,26 @@
     "year": "2018",
     "kind": "result",
     "event": "分齡乒乓球比賽 2018"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/18_pro_b5_KT_DAGC_TT2020_Chi.pdf",
+    "district": "觀塘",
+    "year": "2020",
+    "kind": "prospectus",
+    "event": "觀塘區分齡乒乓球比賽"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/DAGC_TTN_2019_FINAL_CHIN.pdf",
+    "district": "觀塘",
+    "year": "2019",
+    "kind": "prospectus",
+    "event": "觀塘區分齡乒乓球比賽"
+  },
+  {
+    "url": "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/en/18_pro_en_KT_DAGC_TT2020_Eng.pdf",
+    "district": "觀塘",
+    "year": "2020",
+    "kind": "prospectus",
+    "event": "觀塘區分齡乒乓球比賽"
   }
 ]

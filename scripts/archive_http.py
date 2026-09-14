@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -92,7 +93,13 @@ def cdx_prefix(prefix: str, limit: int = 20000) -> list[tuple[str, str]]:
             "limit": str(limit),
         }
     )
-    code, body = http_get("https://web.archive.org/cdx/search/cdx?" + query)
+    url = "https://web.archive.org/cdx/search/cdx?" + query
+    code, body = 0, b""
+    for attempt in range(4):
+        code, body = http_get(url, timeout=25)
+        if code == 200 and body:
+            break
+        time.sleep(2 * (attempt + 1))
     if code != 200 or not body:
         print(f"cdx failed {prefix} ({code})")
         return []
