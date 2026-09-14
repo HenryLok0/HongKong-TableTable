@@ -273,6 +273,30 @@ function hkDistrict(country, city, region) {
   return "";
 }
 
+function ipClass(row) {
+  const org = String(row.org || "").toLowerCase();
+  const country = String(row.country || "").toUpperCase();
+  const overseas = Boolean(country && country !== "HK");
+  let kind = "其他";
+  if (/amazon|aws|google|gcp|microsoft|azure|digitalocean|linode|ovh|hetzner|vultr|cloudflare|akamai|alibaba|aliyun|tencent|huawei\s*cloud|oracle\s*cloud|fastly|colocrossing|psychz/.test(org)) {
+    kind = "託管／VPN";
+  } else if (/mobile|csl|hutchison|smartone|cmhk|china mobile|pccw mobile|1o1o|sun mobile|three hk|3 hong kong|cmi /.test(org)) {
+    kind = "流動網絡";
+  } else if (/hkbn|hong kong broadband|hgc|netvigator|i-cable|i cable|pccw|hkt limited|hkt-|broadband|telecom/.test(org)) {
+    kind = "寬頻";
+  } else if (/universit|\.edu|polyu|cuhk|hkust|cityu|education|school|college/.test(org)) {
+    kind = "學校／機構";
+  }
+  const region = overseas ? "海外" : "香港";
+  const version = String(row.ip || "").includes(":") ? "IPv6" : row.ip ? "IPv4" : "";
+  return {
+    kind,
+    region,
+    version,
+    label: [region, kind, version].filter(Boolean).join(" · "),
+  };
+}
+
 function placeLabel(row) {
   if (row.district) {
     return String(row.country || "").toUpperCase() === "HK" ? `香港${row.district}` : row.district;
@@ -581,6 +605,43 @@ async function loadSnapshots() {
   }
 }
 
+function ipSummaryHtml(rows) {
+  const byIp = new Map();
+  for (const row of rows) {
+    const ip = String(row.ip || "").trim();
+    if (!ip) continue;
+    const cur = byIp.get(ip) || { n: 0, row, klass: ipClass(row) };
+    cur.n += 1;
+    byIp.set(ip, cur);
+  }
+  if (!byIp.size) return `<p class="empty">未有 IP 紀錄。舊日誌可能未存 IP。</p>`;
+  const groups = new Map();
+  for (const [ip, info] of byIp) {
+    const label = `${info.klass.region} · ${info.klass.kind}`;
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push({ ip, ...info });
+  }
+  const rank = (label) => {
+    if (label.startsWith("香港 · 流動")) return 0;
+    if (label.startsWith("香港 · 寬頻")) return 1;
+    if (label.startsWith("香港 · 學校")) return 2;
+    if (label.startsWith("香港 · 託管")) return 3;
+    if (label.startsWith("香港")) return 4;
+    if (label.startsWith("海外")) return 5;
+    return 6;
+  };
+  const labels = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, "zh-HK"));
+  return labels.map((label) => {
+    const list = groups.get(label).sort((a, b) => b.n - a.n || a.ip.localeCompare(b.ip));
+    const chips = list.map((item) => {
+      const place = placeLabel(item.row);
+      const title = [item.ip, place, item.klass.version, item.row.org || ""].filter(Boolean).join(" ");
+      return `<button class="chip ip-chip" type="button" data-filter="${escapeHtml(item.ip)}" title="${escapeHtml(title)}">${escapeHtml(item.ip)}<span>${item.n}${item.klass.version ? " · " + item.klass.version : ""}</span></button>`;
+    }).join("");
+    return `<h3 class="ip-group"><button type="button" class="ip-group-btn" data-filter="${escapeHtml(label)}">${escapeHtml(label)} <span>${list.length}</span></button></h3><div class="chips">${chips}</div>`;
+  }).join("");
+}
+
 function adminPage(rows, shortCount, snaps) {
   const counts = new Map();
   for (const row of rows) {
@@ -590,16 +651,35 @@ function adminPage(rows, shortCount, snaps) {
   const topHtml = top.length
     ? top.map(([name, n]) => `<a class="chip" href="${escapeHtml(resultHrefS(name))}" target="_blank" rel="noreferrer">${escapeHtml(name)}<span>${n}</span></a>`).join("")
     : `<p class="empty">未有紀錄</p>`;
+  const uniqueIpCount = new Set(rows.map((row) => String(row.ip || "").trim()).filter(Boolean)).size;
   const listHtml = rows.length
     ? rows.map((row) => {
       const shown = row.names.slice(0, 8).map((n) => escapeHtml(n)).join("、");
       const extra = row.names.length > 8 ? ` <span class="more">等${row.names.length}人</span>` : "";
       const visitor = formatVisitor(row);
-      const hay = escapeHtml([row.names.join(" "), visitor, row.ip, row.device, row.country].filter(Boolean).join(" "));
+      const klass = ipClass(row);
+      const hay = escapeHtml([
+        row.names.join(" "),
+        visitor,
+        row.ip,
+        row.device,
+        row.country,
+        row.city,
+        row.region,
+        row.district,
+        row.org,
+        row.asn ? "AS" + row.asn : "",
+        klass.label,
+        `${klass.region} · ${klass.kind}`,
+      ].filter(Boolean).join(" "));
+      const tag = klass.label
+        ? `<span class="tag${klass.region === "海外" ? " over" : ""}">${escapeHtml(klass.label)}</span>`
+        : "";
       return `<article class="card" data-q="${hay}">
         <label class="pick"><input type="checkbox" value="${escapeHtml(row.key || "")}" /></label>
         <div class="body">
           <time>${escapeHtml(formatLogWhen(row))}</time>
+          ${tag}
           ${visitor ? `<p class="who">${escapeHtml(visitor)}</p>` : ""}
           <p>${shown}${extra}</p>
         </div>
@@ -664,10 +744,16 @@ function adminPage(rows, shortCount, snaps) {
     .pick { display: flex; align-items: center; gap: .35rem; }
     .pick input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
     .card { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; border-top: 1px solid var(--line); padding: .9rem 0; }
+    .card[hidden] { display: none !important; }
     .card:first-of-type { border-top: 0; }
     .card .body { flex: 1; min-width: 0; }
     .card p { margin: .3rem 0 0; }
     .who { color: var(--muted); font-size: .8rem; line-height: 1.4; }
+    .tag {
+      display: inline-block; margin: 0 .35rem .15rem 0; padding: .05rem .45rem;
+      border-radius: 999px; background: var(--chip); font-size: .72rem; font-weight: 700; color: var(--heading);
+    }
+    .tag.over { background: var(--wash); color: var(--accent); }
     time { color: var(--muted); font-size: .82rem; }
     .actions { display: flex; flex-direction: column; align-items: stretch; gap: .25rem; min-width: 7.2rem; }
     .btn {
@@ -694,12 +780,17 @@ function adminPage(rows, shortCount, snaps) {
     }
     .busy { pointer-events: none; opacity: .55; }
     .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
-    .chip {
+    .chip, button.chip, .ip-group-btn {
       display: inline-flex; gap: .4rem; align-items: center;
       padding: .35rem .7rem; background: var(--chip); border: 1px solid var(--line);
-      border-radius: 999px; color: var(--ink); text-decoration: none; font-size: .9rem;
+      border-radius: 999px; color: var(--ink); text-decoration: none; font: inherit; font-size: .9rem;
+      cursor: pointer;
     }
-    .chip span { color: var(--muted); font-size: .8rem; }
+    .chip span, .ip-group-btn span { color: var(--muted); font-size: .8rem; }
+    button.chip:hover, .ip-group-btn:hover { border-color: var(--accent); }
+    .ip-group { margin: 1rem 0 0; }
+    .ip-group:first-child { margin-top: .35rem; }
+    .ip-group-btn { padding: .2rem .55rem; font-weight: 700; color: var(--heading); }
     .table-wrap { overflow-x: auto; margin-top: .7rem; }
     .snap-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
     .snap-table th, .snap-table td { padding: .45rem .5rem; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -723,6 +814,7 @@ function adminPage(rows, shortCount, snaps) {
     <div class="stats">
       <span class="stat">日誌 <b>${rows.length}</b> 次</span>
       <span class="stat">名單 <b>${counts.size}</b> 個名</span>
+      <span class="stat">IP <b>${uniqueIpCount}</b> 個</span>
       <span class="stat">短連結 <b>${shortCount}</b> 個</span>
       <button class="btn ghost" type="button" id="restore-all"${shortCount ? "" : " disabled"}>由短連結還原日誌</button>
       <button class="btn danger" type="button" id="del-shorts"${shortCount ? "" : " disabled"}>剷除全部短連結</button>
@@ -735,13 +827,19 @@ function adminPage(rows, shortCount, snaps) {
       <p class="hint">每日香港 12:30、00:30 由 GitHub Actions 抓檔後會加一行。急嘅話去 Actions 撳 Run workflow。</p>
       ${snapshotsTable(snaps)}
     </section>
+    <section class="panel">
+      <h2>IP 分類</h2>
+      <p class="hint">跟 Cloudflare 嘅國家／ASN／電訊商推斷，唔係官方身份。撳分類或 IP 會篩選下面最近查詢。</p>
+      ${ipSummaryHtml(rows)}
+    </section>
     <section class="panel" id="log-panel">
       <div class="head-row">
         <h2>最近查詢</h2>
       </div>
       <div class="tools">
         <label class="pick"><input type="checkbox" id="pick-all" /> 全選可見</label>
-        <input type="search" id="filter" placeholder="篩選姓名／IP／裝置" autocomplete="off" />
+        <input type="search" id="filter" placeholder="篩選姓名／IP／裝置／分類" autocomplete="off" />
+        <button class="btn ghost" type="button" id="clear-filter">清除篩選</button>
         <button class="btn danger" type="button" id="del-picked" disabled>剷除已選</button>
       </div>
       ${listHtml}
@@ -834,12 +932,16 @@ function adminPage(rows, shortCount, snaps) {
       }
     }
     document.getElementById("reload-admin")?.addEventListener("click", () => location.reload());
-    document.getElementById("filter")?.addEventListener("input", (event) => {
-      const q = String(event.target.value || "").replace(/\\s+/g, "").toLowerCase();
+    function applyFilter(value) {
+      const input = document.getElementById("filter");
+      if (input && value != null) input.value = value;
+      const q = String(input?.value || "").replace(/\\s+/g, "").toLowerCase();
       let shown = 0;
       document.querySelectorAll(".card").forEach((card) => {
-        const hit = !q || String(card.dataset.q || "").replace(/\\s+/g, "").toLowerCase().includes(q);
-        card.hidden = !hit;
+        const hay = String(card.dataset.q || "").replace(/\\s+/g, "").toLowerCase();
+        const hit = !q || hay.includes(q);
+        if (hit) card.removeAttribute("hidden");
+        else card.setAttribute("hidden", "");
         if (!hit) {
           const box = card.querySelector(".pick input");
           if (box) box.checked = false;
@@ -858,6 +960,11 @@ function adminPage(rows, shortCount, snaps) {
       const pickAll = document.getElementById("pick-all");
       if (pickAll) pickAll.checked = false;
       syncPicked();
+    }
+    document.getElementById("filter")?.addEventListener("input", () => applyFilter());
+    document.getElementById("clear-filter")?.addEventListener("click", () => applyFilter(""));
+    document.querySelectorAll("[data-filter]").forEach((el) => {
+      el.addEventListener("click", () => applyFilter(el.getAttribute("data-filter") || ""));
     });
     document.getElementById("pick-all")?.addEventListener("change", (event) => {
       const on = event.target.checked;
