@@ -2,7 +2,10 @@ const GITHUB_BASE = "https://henrylok0.github.io/HongKong-TableTable/";
 const SITE_ORIGIN = "https://hktt.henrylok.me";
 const MAX_NAMES = 400;
 const SHORT_ID_LEN = 8;
-const INDEX_TTL_MS = 5 * 60 * 1000;
+// Snapshots update about once a day. Keep the in-memory lookup index for an hour.
+const INDEX_TTL_MS = 60 * 60 * 1000;
+const ORIGIN_JSON_MAX_AGE = 3600;
+const META_MAX_AGE = 300;
 // Bind KV as LINKS. Set Worker secret ADMIN_SECRET for /admin query logs.
 const QUERY_PREFIX = "q:";
 const QUERY_LOG_LIMIT = 300;
@@ -68,9 +71,17 @@ function json(data, init = {}) {
     status: init.status || 200,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
+      "cache-control": init.cache || "no-store",
     },
   });
+}
+
+function edgeCacheControl(path) {
+  if (path.startsWith("/data/") && path.endsWith(".json")) return `public, max-age=${ORIGIN_JSON_MAX_AGE}`;
+  if (/\.(js|css)$/.test(path)) return "public, max-age=86400";
+  if (/\.(png|svg|ico|webp|jpe?g|woff2?)$/.test(path)) return "public, max-age=604800";
+  if (path === "/" || path.endsWith(".html")) return "public, max-age=120";
+  return "public, max-age=300";
 }
 
 async function logQueries(env, names, request) {
@@ -876,7 +887,7 @@ async function originJson(file, ctx) {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "cache-control": "public, max-age=300",
+        "cache-control": `public, max-age=${ORIGIN_JSON_MAX_AGE}`,
       },
     });
     ctx.waitUntil(cache.put(cacheKey, cached));
@@ -1088,11 +1099,19 @@ async function loadMeta(ctx) {
   return metaPayload(await getIndex(ctx));
 }
 
-async function proxy(request) {
+async function proxy(request, ctx) {
   const incoming = new URL(request.url);
   const rel = incoming.pathname.replace(/^\//, "");
   const target = new URL(rel, GITHUB_BASE);
   target.search = incoming.search;
+  const path = incoming.pathname;
+  const cache = caches.default;
+  const cacheable = request.method === "GET" && !path.startsWith("/api/") && path !== "/admin";
+  const cacheKey = new Request(incoming.href, { method: "GET" });
+  if (cacheable) {
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+  }
   const res = await fetch(target.href, {
     method: request.method,
     headers: {
@@ -1101,20 +1120,33 @@ async function proxy(request) {
     },
     redirect: "follow",
   });
-  const path = incoming.pathname;
   if (res.status === 404 && !path.startsWith("/api/") && !path.startsWith("/assets/") && path !== "/favicon.ico") {
     return Response.redirect(`${SITE_ORIGIN}/`, 302);
   }
   const type = res.headers.get("content-type") || "";
-  if (request.method !== "GET" || !type.includes("text/html")) return res;
-  let html = await res.text();
-  html = html.replace(/<meta\s+name=["']robots["'][^>]*>/gi, "");
-  html = html.replace(/<script>\s*if\s*\(\/github\\.io\$\/i[\s\S]*?<\/script>/i, "");
-  html = html.replace("</head>", `  <meta name="robots" content="index, follow" />\n</head>`);
-  const headers = new Headers(res.headers);
-  headers.set("content-type", "text/html; charset=utf-8");
-  headers.delete("x-robots-tag");
-  return new Response(html, { status: res.status, headers });
+  let out = res;
+  if (request.method === "GET" && type.includes("text/html")) {
+    let html = await res.text();
+    html = html.replace(/<meta\s+name=["']robots["'][^>]*>/gi, "");
+    html = html.replace(/<script>\s*if\s*\(\/github\\.io\$\/i[\s\S]*?<\/script>/i, "");
+    html = html.replace("</head>", `  <meta name="robots" content="index, follow" />\n</head>`);
+    const headers = new Headers(res.headers);
+    headers.set("content-type", "text/html; charset=utf-8");
+    headers.delete("x-robots-tag");
+    headers.set("cache-control", edgeCacheControl(path === "" ? "/" : path));
+    out = new Response(html, { status: res.status, headers });
+  } else if (cacheable && res.ok) {
+    const headers = new Headers(res.headers);
+    headers.set("cache-control", edgeCacheControl(path));
+    out = new Response(res.body, { status: res.status, headers });
+  }
+  if (cacheable && out.ok && ctx) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+  return out;
+}
+
+async function warmIndex(ctx) {
+  await originJson("data/meta.json", ctx).catch(() => null);
+  await getIndex(ctx);
 }
 
 export default {
@@ -1123,10 +1155,10 @@ export default {
     const path = incoming.pathname;
 
     if (path === "/favicon.ico") {
-      return proxy(new Request(new URL("/assets/favicon.ico", incoming.origin), request));
+      return proxy(new Request(new URL("/assets/favicon.ico", incoming.origin), request), ctx);
     }
     if (path === "/apple-touch-icon.png" || path === "/apple-touch-icon-precomposed.png") {
-      return proxy(new Request(new URL("/assets/apple-touch-icon.png", incoming.origin), request));
+      return proxy(new Request(new URL("/assets/apple-touch-icon.png", incoming.origin), request), ctx);
     }
 
     if (path === "/robots.txt") {
@@ -1181,7 +1213,7 @@ export default {
 
     if (path === "/api/meta") {
       try {
-        return json(await loadMeta(ctx));
+        return json(await loadMeta(ctx), { cache: `public, max-age=${META_MAX_AGE}` });
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
       }
@@ -1261,7 +1293,10 @@ export default {
         return new Response(null, { status: 204 });
       }
       if (request.method !== "POST") {
-        return new Response("POST only", { status: 405 });
+        return new Response("POST only", {
+          status: 405,
+          headers: { "cache-control": "public, max-age=3600", allow: "POST, OPTIONS" },
+        });
       }
       try {
         const body = await request.json();
@@ -1273,6 +1308,11 @@ export default {
       }
     }
 
-    return proxy(request);
+    return proxy(request, ctx);
+  },
+
+  // Dashboard: Triggers → Cron → 10 * * * * (hourly). Fills Cache API so lookups skip GitHub.
+  async scheduled(_event, _env, ctx) {
+    ctx.waitUntil(warmIndex(ctx));
   },
 };

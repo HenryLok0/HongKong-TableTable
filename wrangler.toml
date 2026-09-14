@@ -1,0 +1,9 @@
+# Live worker name on Cloudflare. Bind KV as LINKS and secret ADMIN_SECRET
+# in the dashboard; do not commit those IDs.
+name = "hk-tt"
+main = "workers/hk-tt.js"
+compatibility_date = "2026-09-14"
+
+# Hourly warm of origin JSON cache + lookup index.
+[triggers]
+crons = ["10 * * * *"]
