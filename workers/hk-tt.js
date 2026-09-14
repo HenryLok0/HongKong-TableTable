@@ -569,24 +569,60 @@ function snapshotDelta(now, prev) {
   return `${main} <span class="${up ? "up" : "down"}">${up ? "▲" : "▼"}${Math.abs(n - p)}</span>`;
 }
 
+function snapshotCountsEqual(a, b) {
+  if (!a || !b) return false;
+  return Number(a.hktta) === Number(b.hktta)
+    && Number(a.lcsd) === Number(b.lcsd)
+    && Number(a.badges) === Number(b.badges)
+    && Number(a.unique) === Number(b.unique);
+}
+
+function snapshotUnchanged(row) {
+  return snapshotCountsEqual(row, row.prev);
+}
+
+function snapshotRowHtml(row, newest) {
+  const prev = row.prev || {};
+  const tag = newest ? `<span class="now">今次</span> ` : "";
+  return `<tr>
+    <td>${tag}${escapeHtml(row.at || "")}</td>
+    <td>${snapshotDelta(row.hktta, prev.hktta)}</td>
+    <td>${snapshotDelta(row.lcsd, prev.lcsd)}</td>
+    <td>${snapshotDelta(row.badges, prev.badges)}</td>
+    <td>${snapshotDelta(row.unique, prev.unique)}</td>
+  </tr>`;
+}
+
 function snapshotsTable(snaps) {
   if (!snaps.length) {
     return `<p class="empty">未有更新紀錄。等 GitHub 排程跑完，或者去 Actions 撳 Run workflow。</p>`;
   }
-  const rows = [...snaps].reverse().map((row, idx) => {
-    const prev = row.prev || {};
-    const tag = idx === 0 ? `<span class="now">今次</span> ` : "";
-    return `<tr>
-      <td>${tag}${escapeHtml(row.at || "")}</td>
-      <td>${snapshotDelta(row.hktta, prev.hktta)}</td>
-      <td>${snapshotDelta(row.lcsd, prev.lcsd)}</td>
-      <td>${snapshotDelta(row.badges, prev.badges)}</td>
-      <td>${snapshotDelta(row.unique, prev.unique)}</td>
-    </tr>`;
-  }).join("");
+  const list = [...snaps].reverse();
+  const parts = [];
+  for (let i = 0; i < list.length; ) {
+    const row = list[i];
+    if (!snapshotUnchanged(row)) {
+      parts.push(snapshotRowHtml(row, i === 0));
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < list.length && snapshotUnchanged(list[j + 1]) && snapshotCountsEqual(list[j + 1], row)) {
+      j += 1;
+    }
+    const skipped = j - i - 1;
+    parts.push(snapshotRowHtml(row, i === 0));
+    if (skipped > 0) {
+      parts.push(`<tr class="snap-skip"><td colspan="5">… 中間 ${skipped} 次人數相同 …</td></tr>`);
+      parts.push(snapshotRowHtml(list[j], false));
+    } else if (j > i) {
+      parts.push(snapshotRowHtml(list[j], false));
+    }
+    i = j + 1;
+  }
   return `<div class="table-wrap"><table class="snap-table">
     <thead><tr><th>時間</th><th>乒總</th><th>康文署</th><th>恒生章別</th><th>不重複</th></tr></thead>
-    <tbody>${rows}</tbody>
+    <tbody>${parts.join("")}</tbody>
   </table></div>`;
 }
 
@@ -635,8 +671,9 @@ function ipSummaryHtml(rows) {
     const list = groups.get(label).sort((a, b) => b.n - a.n || a.ip.localeCompare(b.ip));
     const chips = list.map((item) => {
       const place = placeLabel(item.row);
-      const title = [item.ip, place, item.klass.version, item.row.org || ""].filter(Boolean).join(" ");
-      return `<button class="chip ip-chip" type="button" data-filter="${escapeHtml(item.ip)}" title="${escapeHtml(title)}">${escapeHtml(item.ip)}<span>${item.n}${item.klass.version ? " · " + item.klass.version : ""}</span></button>`;
+      const shown = [item.row.device, item.row.browser, item.ip].filter(Boolean).join(" · ");
+      const title = [shown, place, item.klass.version, item.row.org || ""].filter(Boolean).join(" ");
+      return `<button class="chip ip-chip" type="button" data-filter="${escapeHtml(item.ip)}" title="${escapeHtml(title)}">${escapeHtml(shown)}<span>${item.n}${item.klass.version ? " · " + item.klass.version : ""}</span></button>`;
     }).join("");
     return `<h3 class="ip-group"><button type="button" class="ip-group-btn" data-filter="${escapeHtml(label)}">${escapeHtml(label)} <span>${list.length}</span></button></h3><div class="chips">${chips}</div>`;
   }).join("");
@@ -675,7 +712,7 @@ function adminPage(rows, shortCount, snaps) {
       const tag = klass.label
         ? `<span class="tag${klass.region === "海外" ? " over" : ""}">${escapeHtml(klass.label)}</span>`
         : "";
-      return `<article class="card" data-q="${hay}">
+      return `<article class="card" data-q="${hay}" data-ip="${escapeHtml(row.ip || "")}" data-group="${escapeHtml(`${klass.region} · ${klass.kind}`)}">
         <label class="pick"><input type="checkbox" value="${escapeHtml(row.key || "")}" /></label>
         <div class="body">
           <time>${escapeHtml(formatLogWhen(row))}</time>
@@ -788,6 +825,9 @@ function adminPage(rows, shortCount, snaps) {
     }
     .chip span, .ip-group-btn span { color: var(--muted); font-size: .8rem; }
     button.chip:hover, .ip-group-btn:hover { border-color: var(--accent); }
+    button.chip.on, .ip-group-btn.on {
+      background: var(--wash); border-color: var(--accent); color: var(--heading);
+    }
     .ip-group { margin: 1rem 0 0; }
     .ip-group:first-child { margin-top: .35rem; }
     .ip-group-btn { padding: .2rem .55rem; font-weight: 700; color: var(--heading); }
@@ -797,6 +837,7 @@ function adminPage(rows, shortCount, snaps) {
     .snap-table th { color: var(--muted); font-weight: 600; }
     .snap-table .up { color: #1f6b4a; font-weight: 700; }
     .snap-table .down { color: var(--miss); font-weight: 700; }
+    .snap-skip td { color: var(--muted); text-align: center; font-size: .82rem; }
     @media (prefers-color-scheme: dark) { .snap-table .up { color: #9ddbb8; } }
     .now { display: inline-block; margin-right: .35rem; padding: .05rem .4rem; border-radius: 999px; background: var(--wash); color: var(--accent); font-size: .72rem; font-weight: 700; }
     @media (max-width: 640px) {
@@ -824,12 +865,12 @@ function adminPage(rows, shortCount, snaps) {
       <div class="head-row">
         <h2>資料人數</h2>
       </div>
-      <p class="hint">每日香港 12:30、00:30 由 GitHub Actions 抓檔後會加一行。急嘅話去 Actions 撳 Run workflow。</p>
+      <p class="hint">每日香港 12:30、00:30 由 GitHub Actions 抓檔後會加一行。連續冇變嘅更新淨係顯示頭尾。急嘅話去 Actions 撳 Run workflow。</p>
       ${snapshotsTable(snaps)}
     </section>
     <section class="panel">
       <h2>IP 分類</h2>
-      <p class="hint">跟 Cloudflare 嘅國家／ASN／電訊商推斷，唔係官方身份。撳分類或 IP 會篩選下面最近查詢。</p>
+      <p class="hint">跟 Cloudflare 嘅國家／ASN／電訊商推斷，唔係官方身份。撳分類或 IP 可多選，再撳一次取消。</p>
       ${ipSummaryHtml(rows)}
     </section>
     <section class="panel" id="log-panel">
@@ -932,14 +973,21 @@ function adminPage(rows, shortCount, snaps) {
       }
     }
     document.getElementById("reload-admin")?.addEventListener("click", () => location.reload());
-    function applyFilter(value) {
+    const selected = new Set();
+    function applyFilter(value, clearChips) {
       const input = document.getElementById("filter");
       if (input && value != null) input.value = value;
+      if (clearChips) selected.clear();
       const q = String(input?.value || "").replace(/\\s+/g, "").toLowerCase();
+      const tokens = [...selected];
       let shown = 0;
       document.querySelectorAll(".card").forEach((card) => {
         const hay = String(card.dataset.q || "").replace(/\\s+/g, "").toLowerCase();
-        const hit = !q || hay.includes(q);
+        const textOk = !q || hay.includes(q);
+        const ip = card.dataset.ip || "";
+        const group = card.dataset.group || "";
+        const chipOk = !tokens.length || tokens.some((token) => token === ip || token === group);
+        const hit = textOk && chipOk;
         if (hit) card.removeAttribute("hidden");
         else card.setAttribute("hidden", "");
         if (!hit) {
@@ -948,9 +996,12 @@ function adminPage(rows, shortCount, snaps) {
         }
         if (hit) shown += 1;
       });
+      document.querySelectorAll("[data-filter]").forEach((el) => {
+        el.classList.toggle("on", selected.has(el.getAttribute("data-filter") || ""));
+      });
       const old = document.getElementById("empty-filter");
       if (old) old.remove();
-      if (q && !shown) {
+      if ((q || tokens.length) && !shown) {
         const p = document.createElement("p");
         p.className = "empty";
         p.id = "empty-filter";
@@ -962,9 +1013,15 @@ function adminPage(rows, shortCount, snaps) {
       syncPicked();
     }
     document.getElementById("filter")?.addEventListener("input", () => applyFilter());
-    document.getElementById("clear-filter")?.addEventListener("click", () => applyFilter(""));
+    document.getElementById("clear-filter")?.addEventListener("click", () => applyFilter("", true));
     document.querySelectorAll("[data-filter]").forEach((el) => {
-      el.addEventListener("click", () => applyFilter(el.getAttribute("data-filter") || ""));
+      el.addEventListener("click", () => {
+        const token = el.getAttribute("data-filter") || "";
+        if (!token) return;
+        if (selected.has(token)) selected.delete(token);
+        else selected.add(token);
+        applyFilter();
+      });
     });
     document.getElementById("pick-all")?.addEventListener("change", (event) => {
       const on = event.target.checked;
