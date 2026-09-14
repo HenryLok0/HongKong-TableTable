@@ -899,22 +899,28 @@ function parseOriginJson(text, file) {
 async function originJson(file, ctx) {
   const url = new URL(file, GITHUB_BASE).href;
   const cache = caches.default;
-  const cacheKey = new Request(`https://hktt.henrylok.me/__origin/${file}?v=clean1`, { method: "GET" });
+  const cacheKey = new Request(`https://hktt.henrylok.me/__origin/${file}?v=clean2`, { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit.json();
   const res = await fetch(url, {
     headers: { "User-Agent": "hk-tt-worker", Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`${file} ${res.status}`);
-  const data = parseOriginJson(await res.text(), file);
-  const cached = new Response(JSON.stringify(data), {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": `public, max-age=${ORIGIN_JSON_MAX_AGE}`,
-    },
-  });
-  ctx.waitUntil(cache.put(cacheKey, cached.clone()));
+  const raw = await res.text();
+  const data = parseOriginJson(raw, file);
+  const body = raw.includes("<<<<<<<") ? JSON.stringify(data) : raw;
+  ctx.waitUntil(
+    cache.put(
+      cacheKey,
+      new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": `public, max-age=${ORIGIN_JSON_MAX_AGE}`,
+        },
+      }),
+    ),
+  );
   return data;
 }
 
@@ -931,12 +937,10 @@ function scorePlayers(players) {
 }
 
 async function buildIndex(ctx) {
-  const [rankings, lcsd, badges, history] = await Promise.all([
-    originJson("data/rankings.json", ctx),
-    originJson("data/lcsd.json", ctx),
-    originJson("data/badges.json", ctx),
-    originJson("data/hktta_history.json", ctx).catch(() => ({ players: {} })),
-  ]);
+  const rankings = await originJson("data/rankings.json", ctx);
+  const lcsd = await originJson("data/lcsd.json", ctx);
+  const badges = await originJson("data/badges.json", ctx);
+  const history = await originJson("data/hktta_history.json", ctx).catch(() => ({ players: {} }));
   const players = rankings.players || [];
   scorePlayers(players);
   for (const player of players) player._nk = normalizeName(player.name);
