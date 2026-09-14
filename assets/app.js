@@ -230,6 +230,7 @@ let snapshot = null;
 let playerByName = new Map();
 let sourceMeta = null;
 let edgeLookup = false;
+let lookupWarmed = false;
 let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
 let hkttaHistory = { players: {} };
@@ -2308,11 +2309,19 @@ function setSearchStatus(text) {
   if (el) el.textContent = text || "";
 }
 
-function setSearchBusy(busy) {
+function setSearchBusy(busy, firstWait = false) {
   const btn = document.getElementById("search-btn");
   if (!btn) return;
   btn.disabled = Boolean(busy);
   btn.textContent = busy ? "查緊…" : SEARCH_LABEL;
+  const progress = document.getElementById("search-progress");
+  if (progress) {
+    progress.classList.toggle("hidden", !busy);
+    progress.hidden = !busy;
+  }
+  if (busy && firstWait) {
+    setSearchStatus("第一次查詢要載入資料，可能要等幾秒。");
+  }
 }
 
 async function runSearch() {
@@ -2331,8 +2340,15 @@ async function runSearch() {
   }
   const truncated = parsed.length > MAX_NAMES;
   const names = parsed.slice(0, MAX_NAMES);
-  setSearchStatus(truncated ? `名單有 ${parsed.length} 人，每次最多查 ${MAX_NAMES} 個，已只查頭 ${MAX_NAMES} 個。` : "");
-  setSearchBusy(true);
+  const firstWait = edgeLookup && !lookupWarmed;
+  setSearchStatus(
+    truncated
+      ? `名單有 ${parsed.length} 人，每次最多查 ${MAX_NAMES} 個，已只查頭 ${MAX_NAMES} 個。`
+      : firstWait
+        ? "第一次查詢要載入資料，可能要等幾秒。"
+        : "",
+  );
+  setSearchBusy(true, false);
   try {
     if (edgeLookup) {
       try {
@@ -2343,6 +2359,7 @@ async function runSearch() {
         });
         if (!res.ok) throw new Error(res.statusText);
         applyLookupData(await res.json());
+        lookupWarmed = true;
         setNamesEditorOpen(false);
         renderResults();
         syncShareUrl(names).catch(() => {});

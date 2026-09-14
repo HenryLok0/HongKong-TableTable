@@ -27,6 +27,32 @@ function badgeInYear(recs, year) {
   return (recs || []).some((rec) => String(rec.session || "").startsWith(prefix));
 }
 
+function shardId(key) {
+  // FNV-1a 32-bit, first two hex digits. Must match scripts/build_lookup_index.py.
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0").slice(0, 2);
+}
+
+function shardStore() {
+  const slot = globalThis.__HKTT_SHARDS;
+  if (slot?.map && slot.exp > Date.now()) return slot.map;
+  const map = new Map();
+  globalThis.__HKTT_SHARDS = { exp: Date.now() + INDEX_TTL_MS, map };
+  return map;
+}
+
+async function loadShard(ctx, id) {
+  const map = shardStore();
+  if (map.has(id)) return map.get(id);
+  const data = await originJson(`data/idx/s/${id}.json`, ctx).catch(() => ({}));
+  map.set(id, data || {});
+  return map.get(id);
+}
+
 function playerPoints(player) {
   return player.points ?? player.rankings?.ALL?.points ?? 0;
 }
@@ -938,56 +964,34 @@ function scorePlayers(players) {
 
 async function buildIndex(ctx) {
   const rankings = await originJson("data/rankings.json", ctx);
-  const lcsd = await originJson("data/lcsd.json", ctx);
-  const badges = await originJson("data/badges.json", ctx);
-  const history = await originJson("data/hktta_history.json", ctx).catch(() => ({ players: {} }));
+  const ready = await originJson("data/idx/_ready.json", ctx).catch(() => null);
+  const sharded = Number(ready?.v) >= 1;
   const players = rankings.players || [];
   scorePlayers(players);
   for (const player of players) player._nk = normalizeName(player.name);
 
   const playerByName = new Map();
-  const unique = new Set();
   for (const player of players) {
-    if (player._nk) unique.add(player._nk);
     const list = playerByName.get(player._nk);
     if (list) list.push(player);
     else playerByName.set(player._nk, [player]);
   }
 
-  const lcsdPlayers = lcsd.players || {};
-  const badgePlayers = badges.players || {};
-  const lcsdByName = new Map();
-  for (const [name, recs] of Object.entries(lcsdPlayers)) {
-    const key = normalizeName(name) || name;
-    unique.add(key);
-    lcsdByName.set(key, recs);
-  }
-  const year = currentHktYear();
-  let badgeYearCount = 0;
-  const badgeByName = new Map();
-  for (const [name, recs] of Object.entries(badgePlayers)) {
-    const key = normalizeName(name) || name;
-    badgeByName.set(key, recs);
-    if (badgeInYear(recs, year)) {
-      unique.add(key);
-      badgeYearCount += 1;
+  let lcsdByName = new Map();
+  let badgeByName = new Map();
+  let hkttaPastByName = new Map();
+  if (!sharded) {
+    const lcsd = await originJson("data/lcsd.json", ctx).catch(() => ({ players: {} }));
+    const badges = await originJson("data/badges.json", ctx).catch(() => ({ players: {} }));
+    const history = await originJson("data/hktta_history.json", ctx).catch(() => ({ players: {} }));
+    for (const [name, recs] of Object.entries(lcsd.players || {})) {
+      lcsdByName.set(normalizeName(name) || name, recs);
     }
-  }
-
-  const hkttaPastByName = new Map();
-  for (const [name, recs] of Object.entries(history.players || {})) {
-    const key = normalizeName(name) || name;
-    hkttaPastByName.set(key, recs);
-  }
-
-  const lcsdDocCodes = {};
-  for (const recs of Object.values(lcsdPlayers)) {
-    for (const rec of recs) {
-      const url = rec.url || `${rec.district}|${rec.year}`;
-      const code = String(rec.group || "").toUpperCase();
-      if (!url || !code) continue;
-      if (!lcsdDocCodes[url]) lcsdDocCodes[url] = [];
-      if (!lcsdDocCodes[url].includes(code)) lcsdDocCodes[url].push(code);
+    for (const [name, recs] of Object.entries(badges.players || {})) {
+      badgeByName.set(normalizeName(name) || name, recs);
+    }
+    for (const [name, recs] of Object.entries(history.players || {})) {
+      hkttaPastByName.set(normalizeName(name) || name, recs);
     }
   }
 
@@ -998,21 +1002,12 @@ async function buildIndex(ctx) {
     priorPeriod: rankings.prior?.period || "",
     priorAll: rankings.prior?.all || {},
     hktta: players.length,
-    lcsd: Object.keys(lcsdPlayers).length,
-    badges: badgeYearCount,
-    unique: unique.size,
-    hkttaPrev: rankings.prevCount,
-    lcsdPrev: lcsd.prevCount,
-    badgesPrev: badges.prevCount,
-    uniquePrev: rankings.uniquePrev,
-    lcsdUpdated: lcsd.updated || "",
-    badgesUpdated: badges.updated || "",
     players,
     playerByName,
+    sharded,
     lcsdByName,
     badgeByName,
     hkttaPastByName,
-    lcsdDocCodes,
   };
 }
 
@@ -1058,7 +1053,7 @@ function decodeHkttaPast(raw, currentPeriod) {
   return rows;
 }
 
-function lookupNames(index, names) {
+async function lookupNames(index, names, ctx) {
   const queries = [];
   const seen = new Set();
   for (const raw of names) {
@@ -1070,6 +1065,13 @@ function lookupNames(index, names) {
     if (queries.length >= MAX_NAMES) break;
   }
 
+  let extraByKey = null;
+  if (index.sharded && ctx) {
+    const ids = [...new Set(queries.map((item) => shardId(item.key)))];
+    const bags = await Promise.all(ids.map((id) => loadShard(ctx, id)));
+    extraByKey = Object.assign({}, ...bags);
+  }
+
   const priorAll = {};
   const results = queries.map(({ query, key }) => {
     const matches = (index.playerByName.get(key) || []).map((player) => {
@@ -1077,13 +1079,17 @@ function lookupNames(index, names) {
       if (index.priorAll[pk]) priorAll[pk] = index.priorAll[pk];
       return player;
     });
+    const extra = extraByKey ? extraByKey[key] || {} : null;
     return {
       query,
       matches,
       possible: matches.length ? [] : findPossible(index, key),
-      lcsd: index.lcsdByName.get(key) || [],
-      badges: index.badgeByName.get(key) || [],
-      hkttaPast: decodeHkttaPast(index.hkttaPastByName.get(key) || [], index.period),
+      lcsd: extra ? extra.l || [] : index.lcsdByName.get(key) || [],
+      badges: extra ? extra.b || [] : index.badgeByName.get(key) || [],
+      hkttaPast: decodeHkttaPast(
+        extra ? extra.p || [] : index.hkttaPastByName.get(key) || [],
+        index.period,
+      ),
     };
   });
 
@@ -1334,7 +1340,7 @@ export default {
         const body = await request.json();
         const names = Array.isArray(body.names) ? body.names : [];
         const index = await getIndex(ctx);
-        return json(lookupNames(index, names));
+        return json(await lookupNames(index, names, ctx));
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
       }

@@ -293,6 +293,31 @@ button:disabled {
   cursor: wait;
 }
 
+.search-progress {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.search-progress-bar {
+  height: 100%;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--btn-bg);
+  animation: search-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes search-indeterminate {
+  0% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
+}
+
 .hint {
   margin: 12px 0 0;
   font-size: 14px;
