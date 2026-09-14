@@ -2622,14 +2622,17 @@ async function boot() {
   edgeLookup = hasEdge;
   if (edgeLookup) {
     if (!hasMeta) await loadEdgeMeta();
-    const [ageMaps] = await Promise.all([
+    renderDataMeta();
+    bindUi();
+    const extras = Promise.all([
       fetch(dataUrl("lcsd_age_maps.json")).then((res) => (res.ok ? res.json() : null)).catch(() => null),
       loadNameStats(),
     ]);
+    const searching = shared.length ? runSearch() : null;
+    const [ageMaps] = await extras;
     if (ageMaps) lcsdAgeMaps = ageMaps;
-    renderDataMeta();
-    bindUi();
-    if (shared.length) await runSearch();
+    if (searching) await searching;
+    if (ageMaps && lastResults.length) renderResults();
     return;
   }
   if (hasMeta) renderDataMeta();

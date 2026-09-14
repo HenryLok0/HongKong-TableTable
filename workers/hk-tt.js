@@ -1137,7 +1137,10 @@ async function proxy(request, ctx) {
   const cacheKey = new Request(incoming.href, { method: "GET" });
   if (cacheable) {
     const hit = await cache.match(cacheKey);
-    if (hit) return hit;
+    if (hit) {
+      if (path === "/" || path.endsWith(".html")) scheduleIndexWarm(ctx);
+      return hit;
+    }
   }
   const res = await fetch(target.href, {
     method: request.method,
@@ -1168,12 +1171,13 @@ async function proxy(request, ctx) {
     out = new Response(res.body, { status: res.status, headers });
   }
   if (cacheable && out.ok && ctx) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+  if (path === "/" || path.endsWith(".html")) scheduleIndexWarm(ctx);
   return out;
 }
 
-async function warmIndex(ctx) {
-  await originJson("data/meta.json", ctx).catch(() => null);
-  await getIndex(ctx);
+function scheduleIndexWarm(ctx) {
+  if (!ctx) return;
+  ctx.waitUntil(getIndex(ctx).catch(() => null));
 }
 
 export default {
@@ -1320,9 +1324,10 @@ export default {
         return new Response(null, { status: 204 });
       }
       if (request.method !== "POST") {
+        scheduleIndexWarm(ctx);
         return new Response("POST only", {
           status: 405,
-          headers: { "cache-control": "public, max-age=3600", allow: "POST, OPTIONS" },
+          headers: { "cache-control": "no-store", allow: "POST, OPTIONS" },
         });
       }
       try {
@@ -1340,6 +1345,6 @@ export default {
 
   // Dashboard: Triggers → Cron → 10 * * * * (hourly). Fills Cache API so lookups skip GitHub.
   async scheduled(_event, _env, ctx) {
-    ctx.waitUntil(warmIndex(ctx));
+    ctx.waitUntil(getIndex(ctx).catch(() => null));
   },
 };
