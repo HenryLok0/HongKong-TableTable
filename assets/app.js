@@ -2526,8 +2526,20 @@ function bootSettings() {
   });
 }
 
-async function detectEdgeLookup() {
-  if (/github\.io$/i.test(location.hostname)) return false;
+async function loadPublishedMeta() {
+  try {
+    const res = await fetch(dataUrl("meta.json"), { headers: { Accept: "application/json" } });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !Number.isFinite(data.hktta)) return false;
+    applyMeta(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function loadEdgeMeta() {
   try {
     const res = await fetch(apiUrl("api/meta"), { headers: { Accept: "application/json" } });
     if (!res.ok) return false;
@@ -2535,6 +2547,16 @@ async function detectEdgeLookup() {
     if (!data || !Number.isFinite(data.hktta)) return false;
     applyMeta(data);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function detectEdgeLookup() {
+  if (/github\.io$/i.test(location.hostname)) return false;
+  try {
+    const res = await fetch(apiUrl("api/lookup"), { method: "GET" });
+    return res.status === 405 || res.ok;
   } catch {
     return false;
   }
@@ -2592,8 +2614,10 @@ async function boot() {
     document.getElementById("names").value = shared.join("\n");
     setNamesEditorOpen(false);
   }
-  edgeLookup = await detectEdgeLookup();
+  const [hasMeta, hasEdge] = await Promise.all([loadPublishedMeta(), detectEdgeLookup()]);
+  edgeLookup = hasEdge;
   if (edgeLookup) {
+    if (!hasMeta) await loadEdgeMeta();
     const [ageMaps] = await Promise.all([
       fetch(dataUrl("lcsd_age_maps.json")).then((res) => (res.ok ? res.json() : null)).catch(() => null),
       loadNameStats(),
@@ -2604,6 +2628,7 @@ async function boot() {
     if (shared.length) await runSearch();
     return;
   }
+  if (hasMeta) renderDataMeta();
   await bootLocal(shared);
 }
 

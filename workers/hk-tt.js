@@ -1078,6 +1078,16 @@ function metaPayload(index) {
   };
 }
 
+async function loadMeta(ctx) {
+  try {
+    const meta = await originJson("data/meta.json", ctx);
+    if (meta && Number.isFinite(meta.hktta)) return meta;
+  } catch {
+    // Pages may not have published meta.json yet.
+  }
+  return metaPayload(await getIndex(ctx));
+}
+
 async function proxy(request) {
   const incoming = new URL(request.url);
   const rel = incoming.pathname.replace(/^\//, "");
@@ -1171,8 +1181,7 @@ export default {
 
     if (path === "/api/meta") {
       try {
-        const index = await getIndex(ctx);
-        return json(metaPayload(index));
+        return json(await loadMeta(ctx));
       } catch (err) {
         return json({ error: String(err) }, { status: 502 });
       }

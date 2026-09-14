@@ -12,6 +12,7 @@ RANKINGS = ROOT / "data" / "rankings.json"
 LCSD = ROOT / "data" / "lcsd.json"
 BADGES = ROOT / "data" / "badges.json"
 HISTORY = ROOT / "data" / "source_history.json"
+META = ROOT / "data" / "meta.json"
 HKT = timezone(timedelta(hours=8))
 HISTORY_LIMIT = 90
 
@@ -155,6 +156,81 @@ def stamp_unique(snap: dict) -> None:
         BADGES.write_text(json.dumps(badges, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
+def lcsd_doc_codes(lcsd: dict) -> dict[str, list[str]]:
+    codes: dict[str, list[str]] = {}
+    for recs in (lcsd.get("players") or {}).values():
+        for rec in recs or []:
+            url = rec.get("url") or f"{rec.get('district')}|{rec.get('year')}"
+            code = str(rec.get("group") or "").upper()
+            if not url or not code:
+                continue
+            bucket = codes.setdefault(url, [])
+            if code not in bucket:
+                bucket.append(code)
+    return codes
+
+
+def snapshot_from(rankings: dict, lcsd: dict, badges: dict) -> dict:
+    year = current_year()
+    keys: set[str] = set()
+    year_badges = 0
+    for player in rankings.get("players") or []:
+        key = norm(player.get("name"))
+        if key:
+            keys.add(key)
+    for name in lcsd.get("players") or {}:
+        key = norm(name)
+        if key:
+            keys.add(key)
+    for name, recs in (badges.get("players") or {}).items():
+        key = norm(name)
+        if key and badge_in_year(recs, year):
+            keys.add(key)
+            year_badges += 1
+    hktta = rankings.get("count")
+    if hktta is None:
+        hktta = len(rankings.get("players") or [])
+    lcsd_n = lcsd.get("count")
+    if lcsd_n is None:
+        lcsd_n = len(lcsd.get("players") or {})
+    times = [str(item.get("updated") or "").strip() for item in (rankings, lcsd, badges)]
+    times = [text for text in times if text]
+    return {
+        "at": max(times) if times else datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
+        "hktta": int(hktta or 0),
+        "lcsd": int(lcsd_n or 0),
+        "badges": year_badges,
+        "unique": len(keys),
+    }
+
+
+def write_meta(snap: dict | None = None) -> None:
+    rankings = load(RANKINGS) if RANKINGS.exists() else {}
+    lcsd = load(LCSD) if LCSD.exists() else {}
+    badges = load(BADGES) if BADGES.exists() else {}
+    if snap is None:
+        snap = snapshot_from(rankings, lcsd, badges)
+    prior = rankings.get("prior") or {}
+    payload = {
+        "hktta": snap["hktta"],
+        "lcsd": snap["lcsd"],
+        "badges": snap["badges"],
+        "unique": snap["unique"],
+        "uniquePrev": rankings.get("uniquePrev"),
+        "period": rankings.get("period") or "",
+        "updated": rankings.get("updated") or "",
+        "totals": rankings.get("totals") or {},
+        "priorPeriod": prior.get("period") or "",
+        "hkttaPrev": rankings.get("prevCount"),
+        "lcsdPrev": lcsd.get("prevCount"),
+        "badgesPrev": badges.get("prevCount"),
+        "lcsdUpdated": lcsd.get("updated") or "",
+        "badgesUpdated": badges.get("updated") or "",
+        "lcsdDocCodes": lcsd_doc_codes(lcsd),
+    }
+    META.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
 def archive_name_count(path: Path) -> int:
     if not path.exists():
         return 0
@@ -186,6 +262,7 @@ def switched_from_archive_badges(snap: dict, last: dict | None) -> bool:
 def main() -> None:
     snap = current_snapshot()
     stamp_unique(snap)
+    write_meta(snap)
     write_history(snap)
     print(f"unique {snap['unique']} hktta {snap['hktta']} lcsd {snap['lcsd']} badges {snap['badges']}")
 
