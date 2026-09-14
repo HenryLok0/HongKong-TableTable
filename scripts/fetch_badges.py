@@ -707,11 +707,7 @@ def main() -> None:
             print(f"  names {len(rows)} results {len(mapped)} named {len(named)}")
 
     players = merge_players(sittings, results, name_results)
-    prev_count = None
     if old:
-        prev_count = old.get("count")
-        if prev_count is None:
-            prev_count = len(old.get("players") or {})
         kept = 0
         filled_old = 0
         for name, recs in (old.get("players") or {}).items():
@@ -745,12 +741,21 @@ def main() -> None:
     print(f"filled results on {filled} existing rows, added {added} name-only rows")
     stamp_wait_result(players)
 
+    year = datetime.now(HKT).strftime("%Y")
+    year_count = sum(
+        1
+        for recs in players.values()
+        if any(str(rec.get("session") or "").startswith(year) for rec in recs)
+    )
+    old_year_count = old.get("count") if old.get("countYear") == year else None
     payload = {
         "source": "恒生乒乓球學院公開章別考試（考生時間表／成績 PDF）",
         "sourceUrl": LISTING,
         "updated": datetime.now(HKT).strftime("%Y-%m-%d %H:%M"),
-        "count": len(players),
-        "prevCount": prev_count,
+        "count": year_count,
+        "countAll": len(players),
+        "countYear": year,
+        "prevCount": old_year_count if old_year_count is not None else year_count,
         "documents": parsed,
         "players": players,
     }
