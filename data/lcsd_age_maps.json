@@ -583,6 +583,71 @@
           "ageMin": 0,
           "ageMax": 18,
           "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FB": {
+          "ageMin": 50,
+          "ageMax": 59,
+          "doubles": false
+        },
+        "FC": {
+          "ageMin": 35,
+          "ageMax": 49,
+          "doubles": false
+        },
+        "FD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "FE": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "FF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "FG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "FH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "FI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FL": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
         }
       }
     },
@@ -7905,7 +7970,142 @@
           "doubles": false
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/6_sch_b5_CWDAGTTNC2026_Fixture_Draw.pdf": {
+      "source": "schedule",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 50,
+          "ageMax": 59,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 49,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FB": {
+          "ageMin": 50,
+          "ageMax": 59,
+          "doubles": false
+        },
+        "FC": {
+          "ageMin": 35,
+          "ageMax": 49,
+          "doubles": false
+        },
+        "FD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "FE": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "FF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "FG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "FH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "FI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FL": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
     }
   },
-  "updated": "2026-09-15 04:28"
+  "updated": "2026-09-16 03:51"
 }
