@@ -74,6 +74,7 @@ NAME_SPACED_RE = re.compile(
 )
 BADGE_LABEL_RE = re.compile(r"(鑽章(?:（[一二]）)?|白金章|金章|銀章|銅章)")
 PASS_RE = re.compile(r"考獲([^，\s]+章(?:（[一二]）)?)資格")
+CARRY_RE = re.compile(r"於(\d{4})年(\d{1,2})月(\d{1,2})日考獲合格成績")
 MONTH = {
     "Jan": "01",
     "Feb": "02",
@@ -439,6 +440,66 @@ def parse_timetable(text: str, meta: dict) -> list[dict]:
     return rows
 
 
+def apply_result_fields(rec: dict, result: dict) -> None:
+    rec["passed"] = result["passed"]
+    rec["absent"] = result["absent"]
+    rec["waitResult"] = False
+    rec["url"] = result["url"]
+    if result.get("badge"):
+        rec["badge"] = result["badge"]
+    for field in ("tech", "written", "carry"):
+        if field in result:
+            rec[field] = result[field]
+
+
+def parse_result_segment(segment: str, file_badge: str, session: str, url: str) -> dict | None:
+    match = CODE_RE.search(segment)
+    if not match:
+        return None
+    code = (match.group(1) + match.group(2)).upper()
+    body = segment[match.end() :]
+    if "考獲" not in body and "未達合格水平" not in body and "缺席" not in body:
+        return None
+    award = PASS_RE.search(body)
+    badge = (award.group(1) if award else file_badge) or file_badge
+    carry = None
+    carry_match = CARRY_RE.search(body)
+    if carry_match:
+        carry = f"{carry_match.group(1)}-{int(carry_match.group(2)):02d}"
+        body = CARRY_RE.sub(" ", body)
+    body_scores = PASS_RE.sub(" ", body)
+    tokens = re.findall(r"未達合格水平|缺席|合格", body_scores)
+    tech = written = None
+    if carry:
+        tech = True
+        if tokens:
+            written = tokens[0] == "合格"
+    elif len(tokens) >= 2:
+        tech = tokens[0] == "合格"
+        written = tokens[1] == "合格"
+    elif len(tokens) == 1:
+        tech = tokens[0] == "合格"
+    awarded = bool(award)
+    absent = (not awarded) and bool(tokens) and all(tok == "缺席" for tok in tokens)
+    if not awarded and not tokens and "缺席" in segment:
+        absent = True
+    row = {
+        "code": code,
+        "passed": awarded,
+        "absent": absent,
+        "badge": badge,
+        "session": session,
+        "url": url,
+    }
+    if tech is not None:
+        row["tech"] = tech
+    if written is not None:
+        row["written"] = written
+    if carry:
+        row["carry"] = carry
+    return row
+
+
 def parse_results(text: str, meta: dict) -> dict[str, dict]:
     file_badge = badge_from_filename(meta["url"])
     out: dict[str, dict] = {}
@@ -447,21 +508,11 @@ def parse_results(text: str, meta: dict) -> dict[str, dict]:
         found = list(CODE_RE.finditer(line))
         if not found:
             continue
-        if "考獲" not in line and "未達合格" not in line and "缺席" not in line:
-            continue
-        code = (found[0].group(1) + found[0].group(2)).upper()
-        passed = "考獲" in line
-        pass_match = PASS_RE.search(line)
-        badge = (pass_match.group(1) if pass_match else file_badge) or file_badge
-        out[code] = {
-            "code": code,
-            "passed": passed,
-            "absent": "缺席" in line and "考獲" not in line,
-            "badge": badge,
-            "session": meta["session"],
-            "url": meta["url"],
-            "detail": line[:180],
-        }
+        for i, match in enumerate(found):
+            end = found[i + 1].start() if i + 1 < len(found) else len(line)
+            row = parse_result_segment(line[match.start() : end], file_badge, meta["session"], meta["url"])
+            if row:
+                out[row["code"]] = row
     return out
 
 
@@ -517,6 +568,10 @@ def merge_players(
             "url": (result or row)["url"],
             "listUrl": row["url"],
         }
+        if result:
+            for field in ("tech", "written", "carry"):
+                if field in result:
+                    item[field] = result[field]
         existing = {(r.get("session"), r.get("code")) for r in players[row["norm"]]}
         if key not in existing:
             players[row["norm"]].append(item)
@@ -531,12 +586,7 @@ def overlay_results(players: dict, results: dict[tuple[str, str], dict]) -> int:
             if not result:
                 continue
             was_null = rec.get("passed") is None
-            rec["passed"] = result["passed"]
-            rec["absent"] = result["absent"]
-            rec["waitResult"] = False
-            rec["url"] = result["url"]
-            if result.get("badge"):
-                rec["badge"] = result["badge"]
+            apply_result_fields(rec, result)
             if was_null:
                 filled += 1
     return filled
@@ -561,12 +611,7 @@ def overlay_name_results(players: dict, name_results: dict[tuple[str, str], dict
                     result = year_catch
             if not result:
                 continue
-            rec["passed"] = result["passed"]
-            rec["absent"] = result["absent"]
-            rec["waitResult"] = False
-            rec["url"] = result["url"]
-            if result.get("badge"):
-                rec["badge"] = result["badge"]
+            apply_result_fields(rec, result)
             filled += 1
     return filled
 

@@ -678,6 +678,26 @@ button:disabled {
   gap: 6px;
 }
 
+.badge-group {
+  margin-top: 8px;
+}
+
+.badge-group > span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--heading);
+}
+
+.badge-lower {
+  margin-top: 8px;
+}
+
+.badge-lower summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .badge.medal-4 {
   background: #efe6d8;
   color: #6b5344;

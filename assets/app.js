@@ -740,7 +740,7 @@ function badgeAgePrior(item) {
   const records = item.badges || [];
   if (!records.length) return "none";
   const best = bestBadge(records);
-  if (best && badgeRank(best.badge) >= badgeRank("金章")) return "older";
+  if (best && badgeRank(badgeDisplayName(best)) >= badgeRank("金章")) return "older";
   return "none";
 }
 
@@ -1718,11 +1718,111 @@ function badgeRank(label) {
   return 0;
 }
 
+function badgeCodeLetters(code) {
+  return String(code || "").toUpperCase().replace(/[^A-Z]/g, "");
+}
+
+function badgeLevelFromCode(letters) {
+  const first = letters[0];
+  if (first === "B") return "銅章";
+  if (first === "S") return "銀章";
+  if (first === "G") return "金章";
+  if (first === "P") return "白金章";
+  if (first === "D") return "鑽章";
+  return "";
+}
+
+function badgeLevelLabel(rec) {
+  const text = String(rec.badge || "");
+  if (text.includes("鑽章（二）") || text.includes("鑽章(二)")) return "鑽章（二）";
+  if (text.includes("鑽")) return "鑽章";
+  if (text.includes("白金")) return "白金章";
+  if (text.includes("金")) return "金章";
+  if (text.includes("銀")) return "銀章";
+  if (text.includes("銅")) return "銅章";
+  return badgeLevelFromCode(badgeCodeLetters(rec.code));
+}
+
+function isChopBadge(rec) {
+  if (String(rec.badge || "").includes("削球")) return true;
+  const letters = badgeCodeLetters(rec.code);
+  return letters.slice(1).includes("W");
+}
+
+function badgeDisplayName(rec) {
+  const level = badgeLevelLabel(rec);
+  if (!level) return "";
+  return isChopBadge(rec) && !level.includes("削球") ? `削球${level}` : level;
+}
+
+function sittingPartsFromCode(rec) {
+  const letters = badgeCodeLetters(rec.code);
+  const extra = letters.slice(1);
+  const parts = [];
+  if (isChopBadge(rec)) parts.push("削球");
+  if (letters[0] === "B" || !extra || extra === "W" || extra === "D" || extra === "DW" || extra === "WD") {
+    parts.push("技術試");
+    return parts;
+  }
+  if (extra.includes("C")) parts.push("筆試");
+  if (letters[0] !== "B" && extra.includes("B")) parts.push("體能");
+  if (!parts.includes("筆試") && !parts.includes("技術試")) parts.push("技術試");
+  return parts;
+}
+
+function sittingOutcome(rec) {
+  if (rec.absent) return "缺席";
+  if (rec.passed === true) return "合格";
+  if (rec.passed === false) return "未合格";
+  if (rec.waitResult) return "成績未公布";
+  return "成績單未見編號";
+}
+
+function partWord(value, rec) {
+  if (value === true) return "合格";
+  if (value === false) return rec.absent ? "缺席" : "未合格";
+  return "";
+}
+
+function formatBadgeSitting(rec) {
+  const bits = [rec.session];
+  const techWord = partWord(rec.tech, rec);
+  const writtenWord = partWord(rec.written, rec);
+  if (isChopBadge(rec)) bits.push("削球");
+  if (techWord || writtenWord) {
+    if (rec.carry && techWord) bits.push(`技術試已於${rec.carry}合格`);
+    else if (techWord) bits.push(`技術試${techWord}`);
+    if (writtenWord) bits.push(`筆試${writtenWord}`);
+  } else {
+    bits.push(...sittingPartsFromCode(rec).filter((part) => part !== "削球"));
+    bits.push(sittingOutcome(rec));
+  }
+  return bits.filter(Boolean).join(" · ");
+}
+
+function groupBadgeRecords(records) {
+  const groups = new Map();
+  for (const rec of records || []) {
+    const label = badgeDisplayName(rec) || rec.badge || "章別";
+    const key = `${isChopBadge(rec) ? "chop" : "std"}|${badgeRank(label)}|${label}`;
+    if (!groups.has(key)) {
+      groups.set(key, { label, rank: badgeRank(label), awarded: false, rows: [] });
+    }
+    const group = groups.get(key);
+    group.rows.push(rec);
+    if (rec.passed) group.awarded = true;
+  }
+  for (const group of groups.values()) {
+    group.rows.sort((a, b) => String(b.session).localeCompare(String(a.session)));
+  }
+  return [...groups.values()].sort((a, b) => b.rank - a.rank || a.label.localeCompare(b.label, "zh-HK"));
+}
+
 function bestBadge(records) {
   const passed = records.filter((r) => r.passed);
   const pool = passed.length ? passed : records;
   return [...pool].sort((a, b) => {
-    const rank = badgeRank(b.badge) - badgeRank(a.badge);
+    const rank = badgeRank(badgeDisplayName(b)) - badgeRank(badgeDisplayName(a));
     if (rank) return rank;
     return String(b.session).localeCompare(String(a.session));
   })[0] || null;
@@ -1745,33 +1845,40 @@ function badgeTone(id) {
 
 function itemBadgeId(item) {
   const best = bestBadge(item.badges || []);
-  return best ? badgeId(best.badge) : "";
+  return best ? badgeId(badgeDisplayName(best)) : "";
 }
 
 function badgeChip(item) {
   const best = bestBadge(item.badges || []);
   if (!best) return "";
-  const text = best.passed ? `恒生${best.badge}` : `報考${best.badge}`;
-  return `<span class="badge ${badgeTone(badgeId(best.badge))}">${escapeHtml(text)}</span>`;
+  const name = badgeDisplayName(best);
+  const text = best.passed ? `恒生${name}` : `報考${name}`;
+  return `<span class="badge ${badgeTone(badgeId(name))}">${escapeHtml(text)}</span>`;
 }
 
 function renderBadges(records) {
   if (!records.length) return "";
-  const items = [...records]
-    .sort((a, b) => String(b.session).localeCompare(String(a.session)))
-    .map((r) => {
-      let status = "已報考";
-      if (r.passed === true) status = "考獲資格";
-      else if (r.absent) status = "缺席";
-      else if (r.passed === false) status = "未合格";
-      else if (r.waitResult) status = "成績未公布";
-      else status = "成績單未見編號";
-      const bits = [r.session, r.badge, status].filter(Boolean);
-      const href = r.listUrl || r.url;
-      return `<li><a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a></li>`;
-    })
-    .join("");
-  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span><ul>${items}</ul></div>`;
+  const groups = groupBadgeRecords(records);
+  const highestAwarded = Math.max(0, ...groups.filter((group) => group.awarded).map((group) => group.rank));
+  const main = [];
+  const lower = [];
+  for (const group of groups) {
+    const title = `${group.label}${group.awarded ? "（已考獲）" : "（未齊件）"}`;
+    const rows = group.rows.map((rec) => {
+      const href = rec.listUrl || rec.url;
+      const line = formatBadgeSitting(rec);
+      return href
+        ? `<li><a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(line)}</a></li>`
+        : `<li>${escapeHtml(line)}</li>`;
+    }).join("");
+    const html = `<div class="badge-group"><span>${escapeHtml(title)}</span><ul>${rows}</ul></div>`;
+    if (highestAwarded && group.rank < highestAwarded) lower.push(html);
+    else main.push(html);
+  }
+  const lowerHtml = lower.length
+    ? `<details class="badge-lower"><summary>較低章別</summary>${lower.join("")}</details>`
+    : "";
+  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span>${main.join("")}${lowerHtml}</div>`;
 }
 
 function renderLcsd(records) {
@@ -2429,7 +2536,7 @@ const EXPORT_HEADERS = ["姓名", "組別", "全港排名", "排名升跌", "積
 function exportBadgeLabel(item) {
   const best = bestBadge(item.badges || []);
   if (!best) return "";
-  return best.passed ? best.badge : `報考${best.badge}`;
+  return best.passed ? badgeDisplayName(best) : `報考${badgeDisplayName(best)}`;
 }
 
 function exportMove(item) {
