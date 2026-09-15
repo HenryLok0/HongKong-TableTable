@@ -1744,9 +1744,7 @@ function badgeLevelLabel(rec) {
 }
 
 function isChopBadge(rec) {
-  if (String(rec.badge || "").includes("削球")) return true;
-  const letters = badgeCodeLetters(rec.code);
-  return letters.slice(1).includes("W");
+  return String(rec.badge || "").includes("削球");
 }
 
 function badgeDisplayName(rec) {
@@ -1760,12 +1758,14 @@ function sittingPartsFromCode(rec) {
   const extra = letters.slice(1);
   const parts = [];
   if (isChopBadge(rec)) parts.push("削球");
-  if (letters[0] === "B" || !extra || extra === "W" || extra === "D" || extra === "DW" || extra === "WD") {
+  const written = extra.includes("C") || extra.includes("W");
+  const fitness = letters[0] !== "B" && extra.includes("B");
+  if (letters[0] === "B" || !extra) {
     parts.push("技術試");
     return parts;
   }
-  if (extra.includes("C")) parts.push("筆試");
-  if (letters[0] !== "B" && extra.includes("B")) parts.push("體能");
+  if (written) parts.push("筆試");
+  if (fitness) parts.push("體能");
   if (!parts.includes("筆試") && !parts.includes("技術試")) parts.push("技術試");
   return parts;
 }
