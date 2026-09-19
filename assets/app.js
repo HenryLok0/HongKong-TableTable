@@ -1230,10 +1230,7 @@ function schemeForRecord(rec) {
 function bandFromEstimatedAge(nowMin, nowMax) {
   const top = nowMax === OPEN ? nowMin : nowMax;
   const exact = AGE_BANDS.find((b) => nowMin >= b.min && top <= b.max);
-  if (exact) return exact.id;
-  const mid = nowMax === OPEN ? nowMin : (nowMin + nowMax) / 2;
-  const hit = AGE_BANDS.find((b) => mid >= b.min && mid <= b.max);
-  return hit?.id || "";
+  return exact?.id || "";
 }
 
 function isDoublesGroup(code, doublesFlag) {
@@ -1525,7 +1522,7 @@ function resolvedAge(item) {
   if (isRecordedAge(lcsd) || recorded.id) {
     const min = Number.isFinite(lcsd?.nowMin) ? lcsd.nowMin : AGE_BANDS.find((b) => b.id === recorded.id)?.min;
     const max = lcsd && "nowMax" in lcsd ? lcsd.nowMax : AGE_BANDS.find((b) => b.id === recorded.id)?.max;
-    const fine = fineBandContaining(min, max) || AGE_BANDS.find((b) => b.id === recorded.id);
+    const fine = fineBandContaining(min, max);
     const ids = overlappingFineIds(min, max);
     return {
       estimated: false,
@@ -1559,6 +1556,7 @@ function ageBadge(item) {
   const bits = [lcsd.code];
   if (lcsd.period) bits.push(String(lcsd.period));
   else if (lcsd.year) bits.push(String(lcsd.year));
+  if (lcsd.doubles) bits.push("雙打");
   if (lcsd.delta) bits.push(`+${lcsd.delta}年`);
   return `<span class="badge ok">${escapeHtml(`${resolved.label}（${bits.join(" · ")}）`)}</span>`;
 }
