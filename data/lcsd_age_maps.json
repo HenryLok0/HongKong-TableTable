@@ -8305,7 +8305,52 @@
           "doubles": true
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/6_res_b5_Result_DAG_CW_Table_Tennis_Competition_2026.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
     }
   },
-  "updated": "2026-09-28 04:00"
+  "updated": "2026-09-29 06:17"
 }
