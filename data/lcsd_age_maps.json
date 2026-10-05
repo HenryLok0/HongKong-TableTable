@@ -8350,7 +8350,52 @@
           "doubles": true
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/4_res_b5_WCH_DAG.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
     }
   },
-  "updated": "2026-10-05 03:49"
+  "updated": "2026-10-06 06:57"
 }
