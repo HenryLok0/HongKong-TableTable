@@ -1737,7 +1737,7 @@ function badgeLevelLabel(rec) {
   if (fromCode) return fromCode;
   if (text.includes("鑽")) return "鑽章";
   if (text.includes("白金")) return "白金章";
-  if (text.includes("金")) return "金章";
+  if (text.includes("金") || text.includes("金")) return "金章";
   if (text.includes("銀")) return "銀章";
   if (text.includes("銅")) return "銅章";
   return "";
@@ -1804,18 +1804,17 @@ function groupBadgeRecords(records) {
   const groups = new Map();
   for (const rec of records || []) {
     const label = badgeDisplayName(rec) || rec.badge || "章別";
-    const key = `${isChopBadge(rec) ? "chop" : "std"}|${badgeRank(label)}|${label}`;
+    const awarded = rec.passed === true;
+    const key = `${isChopBadge(rec) ? "chop" : "std"}|${badgeRank(label)}|${label}|${awarded ? "y" : "n"}`;
     if (!groups.has(key)) {
-      groups.set(key, { label, rank: badgeRank(label), awarded: false, rows: [] });
+      groups.set(key, { label, rank: badgeRank(label), awarded, rows: [] });
     }
-    const group = groups.get(key);
-    group.rows.push(rec);
-    if (rec.passed) group.awarded = true;
+    groups.get(key).rows.push(rec);
   }
   for (const group of groups.values()) {
     group.rows.sort((a, b) => String(b.session).localeCompare(String(a.session)));
   }
-  return [...groups.values()].sort((a, b) => b.rank - a.rank || a.label.localeCompare(b.label, "zh-HK"));
+  return [...groups.values()].sort((a, b) => b.rank - a.rank || Number(b.awarded) - Number(a.awarded) || a.label.localeCompare(b.label, "zh-HK"));
 }
 
 function bestBadge(records) {
@@ -1865,7 +1864,9 @@ function renderBadges(records) {
   for (const group of groups) {
     const title = `${group.label}${group.awarded ? "（已考獲）" : "（未齊件）"}`;
     const rows = group.rows.map((rec) => {
-      const href = rec.listUrl || rec.url;
+      const href = rec.passed != null || rec.absent || rec.tech != null || rec.written != null
+        ? rec.url || rec.listUrl
+        : rec.listUrl || rec.url;
       const line = formatBadgeSitting(rec);
       return href
         ? `<li><a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(line)}</a></li>`

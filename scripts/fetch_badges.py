@@ -96,6 +96,13 @@ FILE_BADGE = {
     "_P": "白金章",
     "_D": "鑽章",
 }
+LEVEL_FROM_LETTER = {
+    "B": "銅章",
+    "S": "銀章",
+    "G": "金章",
+    "P": "白金章",
+    "D": "鑽章",
+}
 
 
 def ssl_context() -> ssl.SSLContext:
@@ -390,6 +397,44 @@ def pdf_text(path: Path) -> str:
     return "\n".join(chunks)
 
 
+def code_letters(code: str) -> str:
+    return re.sub(r"[^A-Z]", "", str(code or "").upper())
+
+
+def badge_from_code(code: str) -> str:
+    first = code_letters(code)[:1]
+    return LEVEL_FROM_LETTER.get(first, "")
+
+
+def badge_level_name(badge: str) -> str:
+    text = str(badge or "")
+    if "鑽章（二）" in text or "鑽章(二)" in text:
+        return "鑽章（二）"
+    if "鑽" in text:
+        return "鑽章"
+    if "白金" in text:
+        return "白金章"
+    if "金" in text or "金" in text:
+        return "金章"
+    if "銀" in text:
+        return "銀章"
+    if "銅" in text:
+        return "銅章"
+    return ""
+
+
+def canonical_badge(code: str, badge: str = "") -> str:
+    text = str(badge or "")
+    if "鑽章（二）" in text or "鑽章(二)" in text:
+        return "削球鑽章（二）" if "削球" in text else "鑽章（二）"
+    level = badge_from_code(code)
+    if not level:
+        return text
+    if "削球" in text and "削球" not in level:
+        return f"削球{level}"
+    return level
+
+
 def badge_from_filename(url: str) -> str:
     path = unquote(urlparse(url).path)
     low = path.lower()
@@ -404,6 +449,10 @@ def badge_from_filename(url: str) -> str:
     match = re.search(r"/([bsgpd])\.pdf$", low)
     if match and "result" in low:
         return FILE_BADGE[f"_{match.group(1).upper()}"]
+    # Older names like "June G result.pdf" — require a space so "_BS_result" is not silver.
+    match = re.search(r"[\s_-]([bsgpd])\s+result", low)
+    if match:
+        return FILE_BADGE[f"_{match.group(1).upper()}"]
     for word, label in (
         ("bronze", "銅章"),
         ("silver", "銀章"),
@@ -414,6 +463,21 @@ def badge_from_filename(url: str) -> str:
         if word in low:
             return label
     return ""
+
+
+def result_fits_code(code: str, result: dict | None) -> bool:
+    if not result:
+        return False
+    sitting = badge_from_code(code)
+    if not sitting:
+        return True
+    file_level = badge_from_filename(result.get("url") or "")
+    if file_level:
+        return file_level == sitting
+    result_level = badge_level_name(result.get("badge") or "")
+    if not result_level or result_level == "鑽章（二）":
+        return True
+    return result_level == sitting
 
 
 def parse_timetable(text: str, meta: dict) -> list[dict]:
@@ -434,7 +498,7 @@ def parse_timetable(text: str, meta: dict) -> list[dict]:
                 "name": name,
                 "norm": normalize_name(name),
                 "code": code,
-                "badge": label_match.group(1) if label_match else "",
+                "badge": canonical_badge(code, label_match.group(1) if label_match else ""),
                 "session": meta["session"],
                 "url": meta["url"],
             }
@@ -447,8 +511,10 @@ def apply_result_fields(rec: dict, result: dict) -> None:
     rec["absent"] = result["absent"]
     rec["waitResult"] = False
     rec["url"] = result["url"]
-    if result.get("badge"):
-        rec["badge"] = result["badge"]
+    rec["badge"] = canonical_badge(
+        rec.get("code") or result.get("code") or "",
+        result.get("badge") or rec.get("badge") or "",
+    )
     for field in ("tech", "written", "carry"):
         if field in result:
             rec[field] = result[field]
@@ -463,7 +529,7 @@ def parse_result_segment(segment: str, file_badge: str, session: str, url: str) 
     if "考獲" not in body and "未達合格水平" not in body and "缺席" not in body:
         return None
     award = PASS_RE.search(body)
-    badge = (award.group(1) if award else file_badge) or file_badge
+    badge = canonical_badge(code, (award.group(1) if award else file_badge) or file_badge)
     carry = None
     carry_match = CARRY_RE.search(body)
     if carry_match:
@@ -553,12 +619,14 @@ def merge_players(
     players: dict[str, list[dict]] = defaultdict(list)
     for row in sittings:
         key = (row["session"], row["code"])
-        result = results.get(key) or name_results.get((row["session"], row["norm"]))
+        result = results.get(key)
+        if result and not result_fits_code(row["code"], result):
+            result = None
         if not result:
-            year_catch = name_results.get((f"{row['session'][:4]}-00", row["norm"]))
-            if year_catch:
-                result = year_catch
-        badge = (result or {}).get("badge") or row["badge"]
+            named = name_results.get((row["session"], row["norm"]))
+            if named and result_fits_code(row["code"], named):
+                result = named
+        badge = canonical_badge(row["code"], (result or {}).get("badge") or row["badge"])
         item = {
             "name": row["name"],
             "code": row["code"],
@@ -585,7 +653,7 @@ def overlay_results(players: dict, results: dict[tuple[str, str], dict]) -> int:
     for recs in players.values():
         for rec in recs:
             result = results.get((rec.get("session"), rec.get("code")))
-            if not result:
+            if not result or not result_fits_code(rec.get("code") or "", result):
                 continue
             was_null = rec.get("passed") is None
             apply_result_fields(rec, result)
@@ -611,7 +679,7 @@ def overlay_name_results(players: dict, name_results: dict[tuple[str, str], dict
                 year_catch = name_results.get((f"{session[:4]}-00", key))
                 if year_catch and len(sittings_by_year.get(session[:4], [])) == 1:
                     result = year_catch
-            if not result:
+            if not result or not result_fits_code(rec.get("code") or "", result):
                 continue
             apply_result_fields(rec, result)
             filled += 1
@@ -653,6 +721,54 @@ def stamp_wait_result(players: dict) -> None:
                 rec["waitResult"] = (rec.get("session") or "") not in has_outcome
             else:
                 rec["waitResult"] = False
+
+
+def repair_record(rec: dict) -> str | None:
+    """Fix stored label vs candidate code, and drop results copied from another badge PDF."""
+    code = rec.get("code") or ""
+    sitting = badge_from_code(code)
+    if not sitting:
+        return None
+    file_level = badge_from_filename(rec.get("url") or "")
+    list_url = rec.get("listUrl") or ""
+    result_url = rec.get("url") or ""
+    mismatched_file = bool(file_level and file_level != sitting and result_url and result_url != list_url)
+    if mismatched_file:
+        rec["badge"] = canonical_badge(code, rec.get("badge") or "")
+        rec["passed"] = None
+        rec["absent"] = False
+        rec["waitResult"] = True
+        rec["url"] = list_url or result_url
+        for field in ("tech", "written", "carry"):
+            rec.pop(field, None)
+        return "detach"
+    new_badge = canonical_badge(code, rec.get("badge") or "")
+    if rec.get("badge") != new_badge:
+        rec["badge"] = new_badge
+        return "relabel"
+    return None
+
+
+def repair_players(players: dict) -> dict[str, int]:
+    counts = {"relabel": 0, "detach": 0}
+    for recs in players.values():
+        for rec in recs:
+            change = repair_record(rec)
+            if change:
+                counts[change] += 1
+    stamp_wait_result(players)
+    return counts
+
+
+def repair_json() -> None:
+    if not OUT_PATH.exists():
+        print("missing badges.json")
+        return
+    data = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    counts = repair_players(data.get("players") or {})
+    data["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
+    OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"repaired badges.json relabel {counts['relabel']} detach {counts['detach']}")
 
 
 def load_miss() -> set[str]:
@@ -772,8 +888,10 @@ def main() -> None:
                         current["waitResult"] = False
                         if rec.get("url"):
                             current["url"] = rec["url"]
-                        if rec.get("badge"):
-                            current["badge"] = rec["badge"]
+                        current["badge"] = canonical_badge(
+                            current.get("code") or rec.get("code") or "",
+                            rec.get("badge") or current.get("badge") or "",
+                        )
                         filled_old += 1
                     continue
                 players[name].append(rec)
@@ -786,7 +904,8 @@ def main() -> None:
     filled += overlay_name_results(players, name_results)
     added = add_name_only_players(players, name_results)
     print(f"filled results on {filled} existing rows, added {added} name-only rows")
-    stamp_wait_result(players)
+    repaired = repair_players(players)
+    print(f"repaired relabel {repaired['relabel']} detach {repaired['detach']}")
 
     year = datetime.now(HKT).strftime("%Y")
     year_count = sum(
@@ -884,15 +1003,17 @@ def backfill_results() -> None:
     filled = overlay_results(players, results)
     filled += overlay_name_results(players, name_results)
     added = add_name_only_players(players, name_results)
-    stamp_wait_result(players)
+    repaired = repair_players(players)
     data["players"] = players
     data["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
     OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"filled {filled} rows, added {added} name-only, wrote {OUT_PATH}")
+    print(f"filled {filled} rows, added {added} name-only, relabel {repaired['relabel']} detach {repaired['detach']}, wrote {OUT_PATH}")
 
 
 if __name__ == "__main__":
-    if "--backfill" in sys.argv:
+    if "--repair" in sys.argv:
+        repair_json()
+    elif "--backfill" in sys.argv:
         backfill_results()
     else:
         main()
