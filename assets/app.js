@@ -1720,6 +1720,12 @@ function badgeCodeLetters(code) {
   return String(code || "").toUpperCase().replace(/[^A-Z]/g, "");
 }
 
+function formatBadgeCode(code) {
+  const raw = String(code || "").toUpperCase().replace(/\s+/g, "");
+  const match = raw.match(/^([A-Z]+)(\d+)$/);
+  return match ? `${match[1]} ${match[2]}` : raw;
+}
+
 function badgeLevelFromCode(letters) {
   const first = letters[0];
   if (first === "B") return "銅章";
@@ -1760,13 +1766,12 @@ function sittingPartsFromCode(rec) {
   if (isChopBadge(rec)) parts.push("削球");
   const written = extra.includes("C") || extra.includes("W");
   const fitness = letters[0] !== "B" && extra.includes("B");
-  if (letters[0] === "B" || !extra) {
-    parts.push("技術試");
-    return parts;
-  }
+  // S in the code (PCS, PS) means this sitting includes the technical test.
+  const tech = letters[0] === "B" || !extra || extra.includes("S") || (!written && !fitness);
+  if (tech) parts.push("技術試");
   if (written) parts.push("筆試");
   if (fitness) parts.push("體能");
-  if (!parts.includes("筆試") && !parts.includes("技術試")) parts.push("技術試");
+  if (!parts.includes("技術試") && !parts.includes("筆試") && !parts.includes("體能")) parts.push("技術試");
   return parts;
 }
 
@@ -1786,6 +1791,8 @@ function partWord(value, rec) {
 
 function formatBadgeSitting(rec) {
   const bits = [rec.session];
+  const codeText = formatBadgeCode(rec.code);
+  if (codeText) bits.push(codeText);
   const techWord = partWord(rec.tech, rec);
   const writtenWord = partWord(rec.written, rec);
   if (isChopBadge(rec)) bits.push("削球");
