@@ -393,13 +393,15 @@ def pdf_text(path: Path) -> str:
 def badge_from_filename(url: str) -> str:
     path = unquote(urlparse(url).path)
     low = path.lower()
-    for key, label in FILE_BADGE.items():
-        if key.lower() in low and "result" in low:
-            return label
-    match = re.search(r"(?:result.*/|result[_-]web[_-]|result_)([bsgpd])(?:[_-]|\.pdf)", path, re.I)
+    # Read the letter after Result_, not the BS (badge scheme) prefix.
+    # Apr2023_BS_Result_P.pdf must be 白金章, not 銅章 from "_B" inside "_BS_".
+    match = re.search(r"result[^/]*[_/\-]([bsgpd])(?:[_\s\(\-\.]|\.pdf|$)", low)
     if match:
         return FILE_BADGE[f"_{match.group(1).upper()}"]
-    match = re.search(r"/([bsgpd])\.pdf$", path, re.I)
+    match = re.search(r"(?:result.*/|result[_-]web[_-])([bsgpd])(?:[_-]|\.pdf)", low)
+    if match:
+        return FILE_BADGE[f"_{match.group(1).upper()}"]
+    match = re.search(r"/([bsgpd])\.pdf$", low)
     if match and "result" in low:
         return FILE_BADGE[f"_{match.group(1).upper()}"]
     for word, label in (

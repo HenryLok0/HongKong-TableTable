@@ -1733,12 +1733,14 @@ function badgeLevelFromCode(letters) {
 function badgeLevelLabel(rec) {
   const text = String(rec.badge || "");
   if (text.includes("鑽章（二）") || text.includes("鑽章(二)")) return "鑽章（二）";
+  const fromCode = badgeLevelFromCode(badgeCodeLetters(rec.code));
+  if (fromCode) return fromCode;
   if (text.includes("鑽")) return "鑽章";
   if (text.includes("白金")) return "白金章";
   if (text.includes("金")) return "金章";
   if (text.includes("銀")) return "銀章";
   if (text.includes("銅")) return "銅章";
-  return badgeLevelFromCode(badgeCodeLetters(rec.code));
+  return "";
 }
 
 function isChopBadge(rec) {
