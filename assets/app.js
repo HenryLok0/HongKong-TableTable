@@ -8,6 +8,7 @@ const BUCKETS = [
   { id: "hktta-e", label: "乒總戊組" },
   { id: "hktta-past", label: "今期未上榜、過往有乒總紀錄" },
   { id: "lcsd-only", label: "只有參加過康文署比賽" },
+  { id: "badge-only", label: "只有恒生章別紀錄" },
   { id: "none", label: "完全沒有任何紀錄" },
 ];
 
@@ -205,6 +206,7 @@ const FILTERS = [
   { group: "bucket", id: "hktta-e", label: "乒總戊組" },
   { group: "bucket", id: "hktta-past", label: "過往有乒總紀錄" },
   { group: "bucket", id: "lcsd-only", label: "只有康文署比賽" },
+  { group: "bucket", id: "badge-only", label: "只有恒生章別" },
   { group: "extra", id: "has-lcsd", label: "有康文署紀錄" },
   { group: "extra", id: "has-badge", label: "有恒生章別紀錄" },
   { group: "extra", id: "has-hktta-past", label: "有過往乒總榜" },
@@ -1172,6 +1174,7 @@ function classify(item) {
   }
   if ((item.hkttaPast || []).length) return "hktta-past";
   if (item.lcsd.length) return "lcsd-only";
+  if ((item.badges || []).length) return "badge-only";
   return "none";
 }
 
@@ -1789,22 +1792,69 @@ function partWord(value, rec) {
   return "";
 }
 
+function badgeCodeMeaning(rec) {
+  const letters = badgeCodeLetters(rec.code);
+  if (!letters) return [];
+  const bits = [];
+  const level = badgeLevelFromCode(letters);
+  if (level) bits.push(level);
+  for (const part of sittingPartsFromCode(rec)) {
+    if (!bits.includes(part)) bits.push(part);
+  }
+  return bits;
+}
+
+function formatBadgeOutcome(rec) {
+  const techWord = partWord(rec.tech, rec);
+  const writtenWord = partWord(rec.written, rec);
+  if (techWord || writtenWord) {
+    const parts = [];
+    if (rec.carry && techWord) parts.push(`技術試已於${rec.carry}合格`);
+    else if (techWord) parts.push(`技術試${techWord}`);
+    if (writtenWord) parts.push(`筆試${writtenWord}`);
+    return parts.join(" · ");
+  }
+  return sittingOutcome(rec);
+}
+
 function formatBadgeSitting(rec) {
   const bits = [rec.session];
   const codeText = formatBadgeCode(rec.code);
-  if (codeText) bits.push(codeText);
-  const techWord = partWord(rec.tech, rec);
-  const writtenWord = partWord(rec.written, rec);
-  if (isChopBadge(rec)) bits.push("削球");
-  if (techWord || writtenWord) {
-    if (rec.carry && techWord) bits.push(`技術試已於${rec.carry}合格`);
-    else if (techWord) bits.push(`技術試${techWord}`);
-    if (writtenWord) bits.push(`筆試${writtenWord}`);
-  } else {
-    bits.push(...sittingPartsFromCode(rec).filter((part) => part !== "削球"));
-    bits.push(sittingOutcome(rec));
+  if (codeText) {
+    const meaning = badgeCodeMeaning(rec);
+    bits.push(meaning.length ? `${codeText}（${meaning.join(" · ")}）` : codeText);
+  } else if (isChopBadge(rec)) {
+    bits.push("削球");
   }
+  bits.push(formatBadgeOutcome(rec));
   return bits.filter(Boolean).join(" · ");
+}
+
+function badgeHref(href, text, title) {
+  if (!text) return "";
+  const body = escapeHtml(text);
+  if (!href) return body;
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+  return `<a href="${href}" target="_blank" rel="noreferrer"${titleAttr}>${body}</a>`;
+}
+
+function renderBadgeSittingRow(rec) {
+  const bits = [];
+  if (rec.session) bits.push(escapeHtml(rec.session));
+  const codeText = formatBadgeCode(rec.code);
+  const meaning = badgeCodeMeaning(rec);
+  if (codeText) {
+    const codeHtml = badgeHref(rec.listUrl, codeText, "時間表考生編號");
+    const hint = meaning.length ? `<span class="badge-code-hint">（${escapeHtml(meaning.join(" · "))}）</span>` : "";
+    bits.push(`${codeHtml}${hint}`);
+  } else if (isChopBadge(rec)) {
+    bits.push(escapeHtml("削球"));
+  }
+  const outcome = formatBadgeOutcome(rec);
+  const hasResult = rec.passed != null || rec.absent || rec.tech != null || rec.written != null;
+  const resultHref = hasResult ? rec.url || rec.listUrl : "";
+  if (outcome) bits.push(badgeHref(resultHref, outcome, hasResult ? "成績單" : ""));
+  return `<li>${bits.filter(Boolean).join(" · ")}</li>`;
 }
 
 function groupBadgeRecords(records) {
@@ -1870,15 +1920,7 @@ function renderBadges(records) {
   const lower = [];
   for (const group of groups) {
     const title = `${group.label}${group.awarded ? "（已考獲）" : "（未齊件）"}`;
-    const rows = group.rows.map((rec) => {
-      const href = rec.passed != null || rec.absent || rec.tech != null || rec.written != null
-        ? rec.url || rec.listUrl
-        : rec.listUrl || rec.url;
-      const line = formatBadgeSitting(rec);
-      return href
-        ? `<li><a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(line)}</a></li>`
-        : `<li>${escapeHtml(line)}</li>`;
-    }).join("");
+    const rows = group.rows.map((rec) => renderBadgeSittingRow(rec)).join("");
     const html = `<div class="badge-group"><span>${escapeHtml(title)}</span><ul>${rows}</ul></div>`;
     if (highestAwarded && group.rank < highestAwarded) lower.push(html);
     else main.push(html);
@@ -1886,7 +1928,7 @@ function renderBadges(records) {
   const lowerHtml = lower.length
     ? `<details class="badge-lower"><summary>較低章別</summary>${lower.join("")}</details>`
     : "";
-  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span>${main.join("")}${lowerHtml}</div>`;
+  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span>${main.join("")}${lowerHtml}<p class="hint badge-code-note">考生編號由時間表編配；成績單用同一編號對人、唔寫中文名。撳編號開時間表，撳成績開成績單。首字母＝章別（G 金章、P 白金），後加字母＝今場考邊科（C／W 筆試、S 技術試、B 體能）。</p></div>`;
 }
 
 function renderLcsd(records) {
