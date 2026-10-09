@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RANKINGS = ROOT / "data" / "rankings.json"
 LCSD = ROOT / "data" / "lcsd.json"
 BADGES = ROOT / "data" / "badges.json"
+COMP = ROOT / "data" / "comp.json"
 HISTORY = ROOT / "data" / "source_history.json"
 META = ROOT / "data" / "meta.json"
 HKT = timezone(timedelta(hours=8))
@@ -82,15 +83,30 @@ def latest_source_time() -> str:
     return max(times) if times else datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
 
 
+def comp_counts() -> dict:
+    if not COMP.exists():
+        return {"hkssf": 0, "open": 0, "hkgames": 0, "updated": ""}
+    data = load(COMP)
+    counts = data.get("counts") or {}
+    return {
+        "hkssf": int(counts.get("hkssf") or 0),
+        "open": int(counts.get("open") or 0),
+        "hkgames": int(counts.get("hkgames") or 0),
+        "updated": str(data.get("updated") or ""),
+    }
+
+
 def current_snapshot() -> dict:
     unique = unique_names()
     year_badges = len(badge_year_names())
+    extra = comp_counts()
     return {
         "at": latest_source_time(),
         "hktta": player_count(RANKINGS, True),
         "lcsd": player_count(LCSD, False),
         "badges": year_badges,
         "unique": unique,
+        **extra,
     }
 
 
@@ -208,8 +224,10 @@ def write_meta(snap: dict | None = None) -> None:
     rankings = load(RANKINGS) if RANKINGS.exists() else {}
     lcsd = load(LCSD) if LCSD.exists() else {}
     badges = load(BADGES) if BADGES.exists() else {}
+    extra = comp_counts()
     if snap is None:
         snap = snapshot_from(rankings, lcsd, badges)
+        snap.update(extra)
     prior = rankings.get("prior") or {}
     payload = {
         "hktta": snap["hktta"],
@@ -226,6 +244,10 @@ def write_meta(snap: dict | None = None) -> None:
         "badgesPrev": badges.get("prevCount"),
         "lcsdUpdated": lcsd.get("updated") or "",
         "badgesUpdated": badges.get("updated") or "",
+        "hkssf": snap.get("hkssf", extra["hkssf"]),
+        "open": snap.get("open", extra["open"]),
+        "hkgames": snap.get("hkgames", extra["hkgames"]),
+        "compUpdated": extra.get("updated") or "",
         "lcsdDocCodes": lcsd_doc_codes(lcsd),
     }
     META.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

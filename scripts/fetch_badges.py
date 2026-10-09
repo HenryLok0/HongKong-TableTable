@@ -44,7 +44,7 @@ SESSION_FILE_RE = re.compile(
 SESSION_STAMP_RE = re.compile(rf"({MONTH_NAME})[-_]?(\d{{2,4}})", re.I)
 SKIP_RE = re.compile(
     r"form|prospectus|handbook|notice|scope|guideline|covid|entryform|"
-    r"schoolapp|prevention|arrangement|exammarks|nonreg|\bbook\b",
+    r"schoolapp|school.?form|校內報名|prevention|arrangement|exammarks|nonreg|\bbook\b",
     re.I,
 )
 CODE_RE = re.compile(r"(?:^|[\s（(])(?:\d)?([BSGPD][A-Z]{0,3})\s*(\d+)\b")
@@ -928,6 +928,10 @@ def main() -> None:
     OUT_PATH.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     save_miss(miss)
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size} bytes, {len(players)} names)")
+    waiting = any(rec.get("waitResult") for recs in players.values() for rec in recs)
+    if waiting and (archive_state.due("badgeBackfill", days=7) or "--backfill" in sys.argv):
+        archive_state.mark("badgeBackfill")
+        backfill_results()
 
 
 def backfill_results() -> None:

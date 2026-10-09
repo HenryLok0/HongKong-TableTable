@@ -1144,10 +1144,12 @@ async function buildIndex(ctx) {
   let lcsdByName = new Map();
   let badgeByName = new Map();
   let hkttaPastByName = new Map();
+  let compByName = new Map();
   if (!sharded) {
     const lcsd = await originJson("data/lcsd.json", ctx).catch(() => ({ players: {} }));
     const badges = await originJson("data/badges.json", ctx).catch(() => ({ players: {} }));
     const history = await originJson("data/hktta_history.json", ctx).catch(() => ({ players: {} }));
+    const comp = await originJson("data/comp.json", ctx).catch(() => ({ players: {} }));
     for (const [name, recs] of Object.entries(lcsd.players || {})) {
       lcsdByName.set(normalizeName(name) || name, recs);
     }
@@ -1156,6 +1158,9 @@ async function buildIndex(ctx) {
     }
     for (const [name, recs] of Object.entries(history.players || {})) {
       hkttaPastByName.set(normalizeName(name) || name, recs);
+    }
+    for (const [name, recs] of Object.entries(comp.players || {})) {
+      compByName.set(normalizeName(name) || name, recs);
     }
   }
 
@@ -1172,6 +1177,7 @@ async function buildIndex(ctx) {
     lcsdByName,
     badgeByName,
     hkttaPastByName,
+    compByName,
   };
 }
 
@@ -1254,6 +1260,7 @@ async function lookupNames(index, names, ctx) {
         extra ? extra.p || [] : index.hkttaPastByName.get(key) || [],
         index.period,
       ),
+      comp: extra ? extra.c || [] : index.compByName.get(key) || [],
     };
   });
 
@@ -1282,6 +1289,10 @@ function metaPayload(index) {
     badgesPrev: index.badgesPrev,
     lcsdUpdated: index.lcsdUpdated,
     badgesUpdated: index.badgesUpdated,
+    hkssf: index.hkssf,
+    open: index.open,
+    hkgames: index.hkgames,
+    compUpdated: index.compUpdated,
     lcsdDocCodes: index.lcsdDocCodes,
   };
 }

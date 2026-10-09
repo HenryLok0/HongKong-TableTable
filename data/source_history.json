@@ -539,6 +539,40 @@
         "badges": 1326,
         "unique": 15131
       }
+    },
+    {
+      "at": "2026-10-09 05:36",
+      "hktta": 5464,
+      "lcsd": 12115,
+      "badges": 1326,
+      "unique": 15131,
+      "hkssf": 1120,
+      "open": 42,
+      "hkgames": 17,
+      "updated": "2026-10-09 22:00",
+      "prev": {
+        "hktta": 5464,
+        "lcsd": 12115,
+        "badges": 1326,
+        "unique": 15131
+      }
+    },
+    {
+      "at": "2026-10-09 05:36",
+      "hktta": 5464,
+      "lcsd": 12115,
+      "badges": 1326,
+      "unique": 15131,
+      "hkssf": 192,
+      "open": 42,
+      "hkgames": 17,
+      "updated": "2026-10-09 22:13",
+      "prev": {
+        "hktta": 5464,
+        "lcsd": 12115,
+        "badges": 1326,
+        "unique": 15131
+      }
     }
   ]
 }

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LCSD = ROOT / "data" / "lcsd.json"
 BADGES = ROOT / "data" / "badges.json"
 HISTORY = ROOT / "data" / "hktta_history.json"
+COMP = ROOT / "data" / "comp.json"
 OUT_DIR = ROOT / "data" / "idx" / "s"
 READY = ROOT / "data" / "idx" / "_ready.json"
 HKT = timezone(timedelta(hours=8))
@@ -53,6 +54,9 @@ def main() -> None:
     history = load(HISTORY)
     for name, recs in (history.get("players") or {}).items():
         put(shards, norm(name), "p", recs)
+    comp = load(COMP)
+    for name, recs in (comp.get("players") or {}).items():
+        put(shards, norm(name), "c", recs)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for old in OUT_DIR.glob("*.json"):

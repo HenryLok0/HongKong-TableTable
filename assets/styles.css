@@ -179,6 +179,11 @@ footer {
   gap: 12px;
 }
 
+.data-meta-grid.extra {
+  margin-top: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .data-meta-updated {
   margin: 10px 0 0;
   font-size: 14px;
