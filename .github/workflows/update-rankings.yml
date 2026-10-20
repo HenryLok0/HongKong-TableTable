@@ -16,6 +16,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,24 +26,32 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Fetch HKTTA rankings
+        timeout-minutes: 15
         run: python scripts/fetch_rankings.py
       - name: Fetch HKTTA ranking history
+        timeout-minutes: 15
         run: python scripts/fetch_hktta_history.py
         continue-on-error: true
       - name: Fetch LCSD records
+        timeout-minutes: 20
         run: python scripts/fetch_lcsd.py
         continue-on-error: true
       - name: Fetch Hang Seng badge exams
-        run: python scripts/fetch_badges.py
+        timeout-minutes: 20
+        run: python scripts/fetch_badges.py --max=40
         continue-on-error: true
       - name: Fetch school / open / Hong Kong Games results
-        run: python scripts/fetch_comp.py
+        timeout-minutes: 20
+        run: python scripts/fetch_comp.py --max=30
         continue-on-error: true
       - name: Stamp unique name counts
+        timeout-minutes: 10
         run: python scripts/stamp_unique_counts.py
       - name: Stamp name gender and age stats
+        timeout-minutes: 15
         run: python scripts/stamp_name_stats.py
       - name: Build lookup shards
+        timeout-minutes: 15
         run: python scripts/build_lookup_index.py
       - name: Commit snapshot if changed
         run: |

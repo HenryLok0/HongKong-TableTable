@@ -798,14 +798,24 @@ def known_badge_urls(old: dict) -> set[str]:
     return found
 
 
+def arg_max() -> int:
+    for arg in sys.argv[1:]:
+        if arg.startswith("--max="):
+            return int(arg.split("=", 1)[1])
+    return 0
+
+
 def main() -> None:
     import pdfplumber  # noqa: F401
 
+    max_new = arg_max()
     old = json.loads(OUT_PATH.read_text(encoding="utf-8")) if OUT_PATH.exists() else {}
     miss = load_miss()
     known = known_badge_urls(old)
-    listed = listing_urls() + news_pdfs() + extra_urls()
+    live = listing_urls() + news_pdfs()
+    listed = live + extra_urls()
     listed_set = {canon_url(url) for url in listed}
+    live_set = {canon_url(url) for url in live}
     print(f"listing pdfs: {len(listed)}")
     years = {
         str(rec.get("session") or "")[:4]
@@ -825,7 +835,7 @@ def main() -> None:
     skipped = 0
     for meta in docs:
         url = meta["url"]
-        if url not in listed_set:
+        if url not in live_set:
             if url in known:
                 skipped += 1
                 continue
@@ -833,6 +843,11 @@ def main() -> None:
                 skipped += 1
                 continue
         pending.append(meta)
+    head = [meta for meta in pending if meta["url"] in live_set]
+    tail = [meta for meta in pending if meta["url"] not in live_set]
+    if max_new:
+        tail = tail[:max_new]
+    pending = head + tail
     print(f"candidate docs: {len(pending)} skipped {skipped}")
 
     sittings: list[dict] = []
@@ -930,11 +945,11 @@ def main() -> None:
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size} bytes, {len(players)} names)")
     waiting = any(rec.get("waitResult") for recs in players.values() for rec in recs)
     if waiting and (archive_state.due("badgeBackfill", days=7) or "--backfill" in sys.argv):
+        backfill_results(max_new=max_new)
         archive_state.mark("badgeBackfill")
-        backfill_results()
 
 
-def backfill_results() -> None:
+def backfill_results(max_new: int = 0) -> None:
     """Re-read result PDFs for sessions that still have unmatched timetable rows."""
     import pdfplumber  # noqa: F401
 
@@ -979,6 +994,8 @@ def backfill_results() -> None:
                     if extra not in seen:
                         seen.add(extra)
                         urls.append((session, extra))
+    if max_new:
+        urls = urls[:max_new]
     print(f"candidate result pdfs: {len(urls)}")
     results: dict[tuple[str, str], dict] = {}
     name_results: dict[tuple[str, str], dict] = {}
@@ -1018,6 +1035,6 @@ if __name__ == "__main__":
     if "--repair" in sys.argv:
         repair_json()
     elif "--backfill" in sys.argv:
-        backfill_results()
+        backfill_results(max_new=arg_max())
     else:
         main()
