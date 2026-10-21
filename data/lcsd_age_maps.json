@@ -8395,7 +8395,192 @@
           "doubles": true
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/22_res_b5_skttn_r.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "FA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        },
+        "FJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/26_pro_b5_Prospectus_of_DAGC_Racket_Games_2026-27_(Chi)_TTN_KWT_JAN.pdf": {
+      "source": "prospectus",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 50,
+          "ageMax": 59,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 49,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
+    },
+    "葵青|2027": {
+      "source": "prospectus",
+      "groups": {
+        "MA": {
+          "ageMin": 60,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MB": {
+          "ageMin": 50,
+          "ageMax": 59,
+          "doubles": false
+        },
+        "MC": {
+          "ageMin": 35,
+          "ageMax": 49,
+          "doubles": false
+        },
+        "MD": {
+          "ageMin": 25,
+          "ageMax": 34,
+          "doubles": false
+        },
+        "ME": {
+          "ageMin": 19,
+          "ageMax": 24,
+          "doubles": false
+        },
+        "MF": {
+          "ageMin": 16,
+          "ageMax": 18,
+          "doubles": false
+        },
+        "MG": {
+          "ageMin": 14,
+          "ageMax": 15,
+          "doubles": false
+        },
+        "MH": {
+          "ageMin": 12,
+          "ageMax": 13,
+          "doubles": false
+        },
+        "MI": {
+          "ageMin": 10,
+          "ageMax": 11,
+          "doubles": false
+        },
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 35,
+          "ageMax": null,
+          "doubles": true
+        },
+        "ML": {
+          "ageMin": 19,
+          "ageMax": 34,
+          "doubles": true
+        },
+        "MM": {
+          "ageMin": 0,
+          "ageMax": 18,
+          "doubles": true
+        }
+      }
     }
   },
-  "updated": "2026-10-21 04:15"
+  "updated": "2026-10-22 04:22"
 }
