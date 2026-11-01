@@ -777,6 +777,23 @@
         "badges": 1326,
         "unique": 15257
       }
+    },
+    {
+      "at": "2026-11-02 04:46",
+      "hktta": 5464,
+      "lcsd": 12341,
+      "badges": 1326,
+      "unique": 15257,
+      "hkssf": 192,
+      "open": 42,
+      "hkgames": 17,
+      "updated": "2026-11-02 04:54",
+      "prev": {
+        "hktta": 5464,
+        "lcsd": 12341,
+        "badges": 1326,
+        "unique": 15257
+      }
     }
   ]
 }
