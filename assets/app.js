@@ -2506,21 +2506,8 @@ function renderDataMeta() {
   const badgePrev = sourceMeta?.badgesPrev ?? badgeIndex.prevCount;
   const uniquePrev = sourceMeta?.uniquePrev ?? snapshot.uniquePrev;
   const period = periodLabel();
-  const hkssfCount = sourceMeta?.hkssf ?? compIndex.counts?.hkssf ?? 0;
-  const openCount = sourceMeta?.open ?? compIndex.counts?.open ?? 0;
-  const youthCount = sourceMeta?.youth ?? compIndex.counts?.youth ?? 0;
-  const gamesCount = sourceMeta?.hkgames ?? compIndex.counts?.hkgames ?? 0;
   const compAt = sourceMeta?.compUpdated || compIndex.updated || "";
   const stamp = stampDate(latestUpdated(hkttaAt, lcsdAt, badgeAt, compAt));
-  const extraRow = (hkssfCount || openCount || youthCount || gamesCount)
-    ? `<div class="data-meta-grid extra">
-      <div class="stat"><span>學界／菁英賽</span><div class="stat-num"><b>${hkssfCount || 0}</b></div></div>
-      <div class="stat"><span>乒總公開賽成績</span><div class="stat-num"><b>${openCount || 0}</b></div></div>
-      <div class="stat"><span>青少年錦標賽</span><div class="stat-num"><b>${youthCount || 0}</b></div></div>
-      <div class="stat"><span>全港運動會</span><div class="stat-num"><b>${gamesCount || 0}</b></div></div>
-    </div>
-    <p class="hint">學界／公開賽／青少年／港運會唔計入上面「不重複」人數，只用來補比賽實力同 U 組年份。</p>`
-    : "";
   meta.innerHTML = `
     <div class="data-meta-grid">
       <div class="stat"><span>乒總</span><div class="stat-num"><b>${hkttaCount}</b>${deltaHtml(hkttaCount, hkttaPrev)}</div>${period ? `<span class="stat-sub">${escapeHtml(period)}</span>` : ""}</div>
@@ -2528,7 +2515,6 @@ function renderDataMeta() {
       <div class="stat"><span>恒生章別（本年公開考試）</span><div class="stat-num"><b>${badgeCount}</b>${deltaHtml(badgeCount, badgePrev)}</div></div>
       <div class="stat"><span>不重複</span><div class="stat-num"><b>${uniqueCount}</b>${deltaHtml(uniqueCount, uniquePrev)}</div></div>
     </div>
-    ${extraRow}
     ${stamp ? `<p class="hint data-meta-updated">資料更新 ${escapeHtml(stamp)}</p>` : ""}
     <p class="hint">查詢會一併對照過往乒總榜、2016 年起嘅章別考試，以及學界／公開賽／港運會成績。</p>
   `;
