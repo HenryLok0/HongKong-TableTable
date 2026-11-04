@@ -70,16 +70,9 @@ const HKTTA_AGE_RANGE = {
   U17: { min: 16, max: 17 },
   U18: { min: 16, max: 18 },
   U19: { min: 18, max: 19 },
-  U21: { min: 19, max: 21 },
+  U21: { min: 20, max: 21 },
 };
-
-const BADGE_AGE = {
-  b: { min: 6, max: 16 },
-  s: { min: 8, max: 18 },
-  g: { min: 10, max: OPEN },
-  p: { min: 12, max: OPEN },
-  d: { min: 14, max: OPEN },
-};
+const HKTTA_AGED_OUT_MIN = 22;
 
 function ageRange(min, max, doubles = false) {
   return { min, max, doubles };
@@ -240,6 +233,7 @@ let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
 let hkttaHistory = { players: {} };
 let compIndex = { players: {} };
+let uEventsIndex = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
@@ -766,6 +760,7 @@ function formatAgeRange(min, max) {
   if (same) return same.label;
   if (max === OPEN) return `${min}歲或以上`;
   if (min <= 0) return `${max}歲或以下`;
+  if (min === max) return `約${min}歲`;
   return `${min}–${max}歲`;
 }
 
@@ -1073,6 +1068,11 @@ function findComp(query) {
   return compIndex.players?.[key] || [];
 }
 
+function findUEvents(query) {
+  const key = normalizeName(query);
+  return uEventsIndex.players?.[key] || [];
+}
+
 const PAST_GROUP = {
   ALL: "總榜",
   JR: "青少年",
@@ -1205,10 +1205,6 @@ function periodYear(period) {
   return match ? Number(match[1]) : 0;
 }
 
-function sessionYear(session) {
-  return periodYear(session);
-}
-
 function currentYear() {
   return new Date().getFullYear();
 }
@@ -1306,7 +1302,7 @@ function resolveLcsdGroup(raw, scheme) {
 
 function overlappingFineIds(min, max) {
   if (!Number.isFinite(min)) return [];
-  const top = max === OPEN || max == null ? min : max;
+  const top = max === OPEN || max == null ? 200 : max;
   return AGE_BANDS.filter((b) => b.max >= min && b.min <= top).map((b) => b.id);
 }
 
@@ -1327,10 +1323,15 @@ function intersectAgeBounds(a, b) {
 }
 
 function ageCiteRank(row) {
-  if (row.source === "hktta") return 0;
-  if (row.source === "hktta-past") return 1;
-  if (row.source === "lcsd") return 2;
-  if (row.source === "badge") return 3;
+  if (row.source === "u-ladder") return 0;
+  if (uGroupRange(row.code) || /^U\d+$/.test(String(row.code || ""))) {
+    if (row.source === "hktta") return 1;
+    if (row.source === "hktta-past") return 2;
+    if (row.source === "u-event" || row.source === "comp") return 3;
+  }
+  if (row.source === "lcsd") return 4;
+  if (row.code === "不在U21") return 5;
+  if (row.source === "school") return 6;
   return 9;
 }
 
@@ -1370,73 +1371,192 @@ function mergeAgeRows(rows) {
   return greedyIntersectAge(rows);
 }
 
-function hkttaAgeRow(item) {
-  const player = (item.matches || []).find((p) => HKTTA_AGE_RANGE[p.age?.youngestGroup]);
-  if (!player) return null;
-  const group = player.age.youngestGroup;
-  const { min, max } = HKTTA_AGE_RANGE[group];
-  return {
-    band: bandFromEstimatedAge(min, max) || overlappingFineIds(min, max)[0] || "",
-    code: group,
-    year: 0,
-    delta: 0,
-    doubles: false,
-    nowMin: min,
-    nowMax: max,
-    source: "hktta",
-  };
+function uGroupRange(group) {
+  return HKTTA_AGE_RANGE[String(group || "").toUpperCase()] || null;
 }
 
-function hkttaPastAgeRow(row) {
-  const group = String(row.group || "").toUpperCase();
-  const range = HKTTA_AGE_RANGE[group];
-  if (!range) return null;
-  const year = periodYear(row.period);
-  if (!year) return null;
+function parseUnderGroup(text) {
+  const raw = String(text || "");
+  const match = raw.match(/U-?\s*(9|11|12|13|15|17|18|19|21)\b/i)
+    || raw.match(/UNDER\s*(9|11|12|13|15|17|18|19|21)\b/i);
+  if (match) return `U${match[1]}`;
+  const direct = String(text || "").toUpperCase().trim();
+  return uGroupRange(direct) ? direct : "";
+}
+
+const SCHOOL_AGE = {
+  PRI: { min: 0, max: 12, code: "小學" },
+  SEC: { min: 11, max: 19, code: "中學" },
+  UNI: { min: 18, max: OPEN, code: "大專" },
+};
+
+function publishedRankCaps(year) {
+  const y = Number(year);
+  if (y >= 2023) return [9, 11, 13, 15, 17, 19, 21];
+  if (y === 2022) return [9, 13, 15, 19, 21];
+  if (y === 2021) return [15, 21];
+  return [];
+}
+
+function uCapNumber(group) {
+  const parsed = parseUnderGroup(group);
+  const match = String(parsed || group || "").toUpperCase().match(/^U(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function shiftAgeRow(min, max, year, code, source, period) {
+  if (!year || !Number.isFinite(min)) return null;
   const delta = Math.max(0, currentYear() - year);
-  const nowMin = range.min + delta;
-  const nowMax = range.max === OPEN ? OPEN : range.max + delta;
+  const nowMin = min ? min + delta : 0;
+  const nowMax = max === OPEN ? OPEN : max + delta;
   return {
     band: bandFromEstimatedAge(nowMin, nowMax),
-    code: group,
+    code,
     year,
     delta,
     doubles: false,
     nowMin,
     nowMax,
-    source: "hktta-past",
-    period: row.period,
+    source,
+    period: period || "",
   };
 }
 
-function badgeAgeRows(item) {
-  const first = new Map();
-  for (const rec of item.badges || []) {
-    const id = badgeId(rec.badge);
-    if (!BADGE_AGE[id]) continue;
-    const year = sessionYear(rec.session);
-    if (!year) continue;
-    const prev = first.get(id);
-    if (!prev || String(rec.session) < String(prev.session)) first.set(id, rec);
+function hkttaEventCapRow(group, year, source, period) {
+  const n = uCapNumber(group);
+  if (!n) return null;
+  return shiftAgeRow(0, n, year, `U${n}`, source || "u-event", period);
+}
+
+function hkttaRankingAgeRow(group, year, source, period) {
+  const n = uCapNumber(group);
+  if (!n) return null;
+  const published = publishedRankCaps(year);
+  const younger = Math.max(0, ...published.filter((cap) => cap < n));
+  const min = younger ? younger + 1 : 0;
+  return shiftAgeRow(min, n, year, `U${n}`, source || "hktta-past", period);
+}
+
+function hkttaAgedOutRow(year, source, period) {
+  if (!year) return null;
+  const delta = Math.max(0, currentYear() - year);
+  const nowMin = HKTTA_AGED_OUT_MIN + delta;
+  return {
+    band: "",
+    code: "不在U21",
+    year,
+    delta,
+    doubles: false,
+    nowMin,
+    nowMax: OPEN,
+    source,
+    period: period || "",
+  };
+}
+
+function hkttaAgeRow(item) {
+  const player = (item.matches || []).find((p) => p.age?.youngestGroup || overall(p));
+  if (!player) return null;
+  const fromU = hkttaRankingAgeRow(player.age?.youngestGroup, currentYear(), "hktta");
+  if (fromU) return fromU;
+  if (!overall(player)) return null;
+  return hkttaAgedOutRow(currentYear(), "hktta");
+}
+
+function periodHasUGroup(item, period) {
+  return (item.hkttaPast || []).some((row) => (
+    row.period === period && uGroupRange(row.group)
+  ));
+}
+
+function noteYoungestU(map, year, group, via) {
+  const n = uCapNumber(group);
+  const y = Number(year);
+  if (!y || !n) return;
+  const cur = map.get(y);
+  if (!cur || n < cur.n) map.set(y, { n, group: `U${n}`, via });
+}
+
+function youngestUByYear(item) {
+  // Per calendar year keep the youngest U-band only (ignore playing up in doubles).
+  const map = new Map();
+  for (const rec of item.uEvents || []) {
+    noteYoungestU(map, rec.y || rec.year, rec.g || rec.group, "event");
   }
+  for (const rec of item.comp || []) {
+    const group = parseUnderGroup(rec.group) || parseUnderGroup(rec.event);
+    noteYoungestU(map, recYear(rec) || periodYear(rec.event), group, "comp");
+  }
+  for (const row of item.hkttaPast || []) {
+    noteYoungestU(map, periodYear(row.period), row.group, "rank");
+  }
+  const current = (item.matches || []).find((p) => p.age?.youngestGroup);
+  if (current?.age?.youngestGroup) {
+    noteYoungestU(map, currentYear(), current.age.youngestGroup, "rank");
+  }
+  return map;
+}
+
+function uLadderFloorRows(item) {
+  const map = youngestUByYear(item);
+  const years = [...map.keys()].sort((a, b) => a - b);
   const rows = [];
-  for (const [id, rec] of first) {
-    const bound = BADGE_AGE[id];
-    const year = sessionYear(rec.session);
-    const delta = Math.max(0, currentYear() - year);
-    const useMax = rec.passed && bound.max !== OPEN && (id === "b" || id === "s");
-    const nowMin = bound.min + delta;
-    const nowMax = useMax ? bound.max + delta : OPEN;
-    rows.push({
-      band: bandFromEstimatedAge(nowMin, nowMax),
-      code: rec.badge,
-      year,
-      delta,
-      doubles: false,
-      nowMin,
-      nowMax,
-      source: "badge",
-    });
+  for (let i = 0; i < years.length - 1; i += 1) {
+    const y = years[i];
+    const nxt = years[i + 1];
+    if (nxt !== y + 1) continue;
+    const n = map.get(y).n;
+    const m = map.get(nxt).n;
+    if (m <= n) continue;
+    rows.push(shiftAgeRow(n + 1, OPEN, nxt, `U${n}→U${m}`, "u-ladder"));
+  }
+  return rows.filter(Boolean);
+}
+
+function uEventAgeRows(item) {
+  const rows = [];
+  for (const rec of item.uEvents || []) {
+    const group = rec.g || rec.group;
+    const year = Number(rec.y || rec.year);
+    const cap = hkttaEventCapRow(group, year, "u-event");
+    if (cap) rows.push(cap);
+    const school = SCHOOL_AGE[String(group || "").toUpperCase()];
+    if (school) {
+      const row = shiftAgeRow(school.min, school.max, year, school.code, "school");
+      if (row) rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function hkttaPastYoungestAgeRows(item) {
+  const byYear = new Map();
+  for (const row of item.hkttaPast || []) {
+    const year = periodYear(row.period);
+    const n = uCapNumber(row.group);
+    if (!year || !n) continue;
+    const cur = byYear.get(year);
+    if (!cur || n < cur.n) byYear.set(year, { n, group: `U${n}`, period: row.period });
+  }
+  return [...byYear.entries()]
+    .map(([year, info]) => hkttaRankingAgeRow(info.group, year, "hktta-past", info.period))
+    .filter(Boolean);
+}
+
+function hkttaPastAgedOutRow(row, item) {
+  const group = String(row.group || "").toUpperCase();
+  if (group && group !== "ALL") return null;
+  if (periodHasUGroup(item, row.period)) return null;
+  return hkttaAgedOutRow(periodYear(row.period), "hktta-past", row.period);
+}
+
+function compAgeRows(item) {
+  const rows = [];
+  for (const rec of item.comp || []) {
+    const group = parseUnderGroup(rec.group) || parseUnderGroup(rec.event);
+    const year = recYear(rec) || periodYear(rec.event);
+    const row = hkttaEventCapRow(group, year, "comp");
+    if (row) rows.push(row);
   }
   return rows;
 }
@@ -1484,34 +1604,21 @@ function evidenceAge(item) {
   const current = hkttaAgeRow(item);
   if (current) hard.push(current);
   const soft = [
-    ...(item.hkttaPast || []).map(hkttaPastAgeRow).filter(Boolean),
+    ...hkttaPastYoungestAgeRows(item),
+    ...(item.hkttaPast || []).map((row) => hkttaPastAgedOutRow(row, item)).filter(Boolean),
+    ...uEventAgeRows(item),
+    ...uLadderFloorRows(item),
+    ...compAgeRows(item),
     ...lcsdAgeRows(item),
-    ...badgeAgeRows(item),
   ];
-  let merged = greedyIntersectAge(soft, hard);
-  const floor = hkttaAdultFloor(item);
-  if (!floor) return merged;
-  const floorRow = {
-    band: "",
-    code: "",
-    year: 0,
-    delta: 0,
-    doubles: false,
-    nowMin: floor,
-    nowMax: OPEN,
-    source: "floor",
-  };
-  if (!merged) return greedyIntersectAge(soft, [...hard, floorRow]);
-  const clipped = intersectAgeBounds(merged, floorRow);
-  if (clipped) return { ...merged, ...clipped, band: bandFromEstimatedAge(clipped.nowMin, clipped.nowMax) };
-  return greedyIntersectAge(soft, [...hard, floorRow]);
+  return greedyIntersectAge(soft, hard);
 }
 
 function isRecordedAge(row) {
   if (!row || !Number.isFinite(row.nowMin)) return false;
-  if (row.source === "floor" || !row.code) return false;
+  if (row.source === "floor" || row.source === "badge" || row.source === "school" || !row.code) return false;
   if (row.nowMax !== OPEN && Number.isFinite(row.nowMax)) return true;
-  return row.nowMin >= 16;
+  return row.source === "hktta" || row.source === "hktta-past" || row.source === "comp" || row.source === "u-event" || row.source === "u-ladder";
 }
 
 function recordedAgeBand(item) {
@@ -1537,7 +1644,7 @@ function resolvedAge(item) {
   if (isRecordedAge(lcsd) || recorded.id) {
     const min = Number.isFinite(lcsd?.nowMin) ? lcsd.nowMin : AGE_BANDS.find((b) => b.id === recorded.id)?.min;
     const max = lcsd && "nowMax" in lcsd ? lcsd.nowMax : AGE_BANDS.find((b) => b.id === recorded.id)?.max;
-    const fine = fineBandContaining(min, max);
+    const fine = max === OPEN ? null : fineBandContaining(min, max);
     const ids = overlappingFineIds(min, max);
     return {
       estimated: false,
@@ -1545,7 +1652,7 @@ function resolvedAge(item) {
       ids: ids.length ? ids : recorded.id ? [recorded.id] : [],
       min,
       max,
-      label: fine?.label || (Number.isFinite(min) ? formatAgeRange(min, max) : recorded.id),
+      label: Number.isFinite(min) ? formatAgeRange(min, max) : recorded.id,
       lcsd,
     };
   }
@@ -1957,6 +2064,33 @@ function compPlaceChip(rec) {
   return "";
 }
 
+function uYearRuns(item) {
+  const map = youngestUByYear(item);
+  const years = [...map.keys()].sort((a, b) => a - b);
+  const runs = [];
+  for (const y of years) {
+    const group = map.get(y).group;
+    const last = runs[runs.length - 1];
+    if (last && last.group === group && last.end === y - 1) {
+      last.end = y;
+      continue;
+    }
+    runs.push({ start: y, end: y, group });
+  }
+  return runs;
+}
+
+function renderUYears(item) {
+  const runs = uYearRuns(item);
+  if (!runs.length) return "";
+  if (runs.length < 2 && !(item.uEvents || []).length) return "";
+  const items = runs.map((run) => {
+    const span = run.start === run.end ? String(run.start) : `${run.start}–${run.end}`;
+    return `<li>${escapeHtml(`${span} · ${run.group}`)}</li>`;
+  }).join("");
+  return `<div class="lcsd-box"><span>年齡組別年份（每年取最細 U 組）</span><ul>${items}</ul></div>`;
+}
+
 function renderComp(records) {
   const rows = [...(records || [])].sort((a, b) => {
     const years = Number(b.year || 0) - Number(a.year || 0);
@@ -2011,10 +2145,11 @@ function renderCard(item, totals, orderLabel) {
   const lcsdHtml = renderLcsd(item.lcsd);
   const badgeHtml = renderBadges(item.badges || []);
   const pastHtml = renderHkttaPast(item.hkttaPast || [], !item.matches.length);
+  const uYearHtml = renderUYears(item);
   const compHtml = renderComp(item.comp || []);
 
   if (!item.matches.length) {
-    const hasExtra = item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length || (item.comp || []).length;
+    const hasExtra = item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length || (item.comp || []).length || (item.uEvents || []).length;
     const tone = hasExtra ? "lcsd" : "missing";
     const possible = item.possible || [];
     let miss = (item.hkttaPast || []).length
@@ -2023,6 +2158,8 @@ function renderCard(item, totals, orderLabel) {
       ? "今期乒總公布榜未見精確姓名，但康文署分齡賽程／成績 PDF 有呢個名。"
       : (item.comp || []).length
         ? "今期乒總公布榜未見精確姓名，但學界／乒總公開賽／港運會成績 PDF 有呢個名。"
+        : (item.uEvents || []).length
+        ? "今期乒總公布榜未見精確姓名，但有青少年／學界年齡組別年份紀錄。"
         : (item.badges || []).length
         ? "今期乒總公布榜未見精確姓名，但恒生公開章別考試時間表有呢個名。"
         : "今期乒總公布榜未見精確姓名。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。";
@@ -2042,6 +2179,7 @@ function renderCard(item, totals, orderLabel) {
       </div>
       <p>${miss}</p>
       ${pastHtml}
+      ${uYearHtml}
       ${compHtml}
       ${lcsdHtml}
       ${badgeHtml}
@@ -2072,6 +2210,7 @@ function renderCard(item, totals, orderLabel) {
         <p>${levelText(player)}</p>
         <div class="ranks">${rankChips(player)}</div>
         ${pastHtml}
+        ${uYearHtml}
         ${compHtml}
         ${lcsdHtml}
         ${badgeHtml}
@@ -2629,6 +2768,7 @@ async function runSearch() {
         badges: findBadges(query),
         hkttaPast: findHkttaPast(query),
         comp: findComp(query),
+        uEvents: findUEvents(query),
       };
     });
     setNamesEditorOpen(false);
@@ -2846,18 +2986,20 @@ async function bootLocal(shared) {
   bindUi();
   if (shared.length) await runSearch();
   try {
-    const [lcsdRes, ageMapRes, badgeRes, histRes, compRes] = await Promise.all([
+    const [lcsdRes, ageMapRes, badgeRes, histRes, compRes, uRes] = await Promise.all([
       fetch(dataUrl("lcsd.json")),
       fetch(dataUrl("lcsd_age_maps.json")),
       fetch(dataUrl("badges.json")),
       fetch(dataUrl("hktta_history.json")),
       fetch(dataUrl("comp.json")),
+      fetch(dataUrl("hktta_u_events.json")),
     ]);
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
     if (histRes.ok) hkttaHistory = await histRes.json();
     if (compRes.ok) compIndex = await compRes.json();
+    if (uRes.ok) uEventsIndex = await uRes.json();
     indexLcsdDocCodes();
     if (!(await loadNameStats())) buildNameStats();
     renderDataMeta();
@@ -2868,6 +3010,7 @@ async function bootLocal(shared) {
         badges: findBadges(item.query),
         hkttaPast: item.hkttaPast || findHkttaPast(item.query),
         comp: item.comp || findComp(item.query),
+        uEvents: item.uEvents || findUEvents(item.query),
       }));
       renderResults();
     }
