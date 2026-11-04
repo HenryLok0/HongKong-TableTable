@@ -85,12 +85,13 @@ def latest_source_time() -> str:
 
 def comp_counts() -> dict:
     if not COMP.exists():
-        return {"hkssf": 0, "open": 0, "hkgames": 0, "updated": ""}
+        return {"hkssf": 0, "open": 0, "youth": 0, "hkgames": 0, "updated": ""}
     data = load(COMP)
     counts = data.get("counts") or {}
     return {
         "hkssf": int(counts.get("hkssf") or 0),
         "open": int(counts.get("open") or 0),
+        "youth": int(counts.get("youth") or 0),
         "hkgames": int(counts.get("hkgames") or 0),
         "updated": str(data.get("updated") or ""),
     }
@@ -246,6 +247,7 @@ def write_meta(snap: dict | None = None) -> None:
         "badgesUpdated": badges.get("updated") or "",
         "hkssf": snap.get("hkssf", extra["hkssf"]),
         "open": snap.get("open", extra["open"]),
+        "youth": snap.get("youth", extra["youth"]),
         "hkgames": snap.get("hkgames", extra["hkgames"]),
         "compUpdated": extra.get("updated") or "",
         "lcsdDocCodes": lcsd_doc_codes(lcsd),

@@ -11,8 +11,7 @@ Live: [https://henrylok0.github.io/HongKong-TableTable/](https://henrylok0.githu
 | HKTTA computer ranking PDFs (points, official rank, U-groups, club / school / coach) | `scripts/fetch_rankings.py` | `data/rankings.json` |
 | LCSD district age-group schedule / result PDFs | `scripts/fetch_lcsd.py` | `data/lcsd.json`, `data/lcsd_age_maps.json` |
 | Hang Seng public badge-exam timetables (and result PDFs for pass/fail) | `scripts/fetch_badges.py` | `data/badges.json` |
-| HKSSF / HKTTA open events / Hong Kong Games result PDFs | `scripts/fetch_comp.py` | `data/comp.json` |
-| HKTTA youth / school U-group years (youngest band only; no match scores) | curated | `data/hktta_u_events.json` |
+| HKSSF / HKTTA open / youth / Hong Kong Games result PDFs | `scripts/fetch_comp.py` | `data/comp.json` |
 
 The browser only reads those JSON files. It does not scrape HKTTA / LCSD / HSTTA at runtime.
 

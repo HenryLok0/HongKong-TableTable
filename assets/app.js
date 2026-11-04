@@ -233,7 +233,6 @@ let lcsdIndex = { players: {} };
 let badgeIndex = { players: {} };
 let hkttaHistory = { players: {} };
 let compIndex = { players: {} };
-let uEventsIndex = { players: {} };
 let lcsdDocCodes = new Map();
 let lcsdAgeMaps = { maps: {} };
 let lastResults = [];
@@ -1068,11 +1067,6 @@ function findComp(query) {
   return compIndex.players?.[key] || [];
 }
 
-function findUEvents(query) {
-  const key = normalizeName(query);
-  return uEventsIndex.players?.[key] || [];
-}
-
 const PAST_GROUP = {
   ALL: "總榜",
   JR: "青少年",
@@ -1327,7 +1321,7 @@ function ageCiteRank(row) {
   if (uGroupRange(row.code) || /^U\d+$/.test(String(row.code || ""))) {
     if (row.source === "hktta") return 1;
     if (row.source === "hktta-past") return 2;
-    if (row.source === "u-event" || row.source === "comp") return 3;
+    if (row.source === "comp") return 3;
   }
   if (row.source === "lcsd") return 4;
   if (row.code === "不在U21") return 5;
@@ -1378,17 +1372,16 @@ function uGroupRange(group) {
 function parseUnderGroup(text) {
   const raw = String(text || "");
   const match = raw.match(/U-?\s*(9|11|12|13|15|17|18|19|21)\b/i)
-    || raw.match(/UNDER\s*(9|11|12|13|15|17|18|19|21)\b/i);
+    || raw.match(/UNDER\s*(9|11|12|13|15|17|18|19|21)\b/i)
+    || raw.match(/\b(9|11|12|13|15|17|18|19|21)\s*歲/);
   if (match) return `U${match[1]}`;
   const direct = String(text || "").toUpperCase().trim();
   return uGroupRange(direct) ? direct : "";
 }
 
-const SCHOOL_AGE = {
-  PRI: { min: 0, max: 12, code: "小學" },
-  SEC: { min: 11, max: 19, code: "中學" },
-  UNI: { min: 18, max: OPEN, code: "大專" },
-};
+function isCompDoubles(rec) {
+  return /雙打|混雙|Double/i.test(`${rec?.group || ""} ${rec?.event || ""}`);
+}
 
 function publishedRankCaps(year) {
   const y = Number(year);
@@ -1425,7 +1418,7 @@ function shiftAgeRow(min, max, year, code, source, period) {
 function hkttaEventCapRow(group, year, source, period) {
   const n = uCapNumber(group);
   if (!n) return null;
-  return shiftAgeRow(0, n, year, `U${n}`, source || "u-event", period);
+  return shiftAgeRow(0, n, year, `U${n}`, source || "comp", period);
 }
 
 function hkttaRankingAgeRow(group, year, source, period) {
@@ -1480,10 +1473,8 @@ function noteYoungestU(map, year, group, via) {
 function youngestUByYear(item) {
   // Per calendar year keep the youngest U-band only (ignore playing up in doubles).
   const map = new Map();
-  for (const rec of item.uEvents || []) {
-    noteYoungestU(map, rec.y || rec.year, rec.g || rec.group, "event");
-  }
   for (const rec of item.comp || []) {
+    if (isCompDoubles(rec)) continue;
     const group = parseUnderGroup(rec.group) || parseUnderGroup(rec.event);
     noteYoungestU(map, recYear(rec) || periodYear(rec.event), group, "comp");
   }
@@ -1513,22 +1504,6 @@ function uLadderFloorRows(item) {
   return rows.filter(Boolean);
 }
 
-function uEventAgeRows(item) {
-  const rows = [];
-  for (const rec of item.uEvents || []) {
-    const group = rec.g || rec.group;
-    const year = Number(rec.y || rec.year);
-    const cap = hkttaEventCapRow(group, year, "u-event");
-    if (cap) rows.push(cap);
-    const school = SCHOOL_AGE[String(group || "").toUpperCase()];
-    if (school) {
-      const row = shiftAgeRow(school.min, school.max, year, school.code, "school");
-      if (row) rows.push(row);
-    }
-  }
-  return rows;
-}
-
 function hkttaPastYoungestAgeRows(item) {
   const byYear = new Map();
   for (const row of item.hkttaPast || []) {
@@ -1553,6 +1528,7 @@ function hkttaPastAgedOutRow(row, item) {
 function compAgeRows(item) {
   const rows = [];
   for (const rec of item.comp || []) {
+    if (isCompDoubles(rec)) continue;
     const group = parseUnderGroup(rec.group) || parseUnderGroup(rec.event);
     const year = recYear(rec) || periodYear(rec.event);
     const row = hkttaEventCapRow(group, year, "comp");
@@ -1606,7 +1582,6 @@ function evidenceAge(item) {
   const soft = [
     ...hkttaPastYoungestAgeRows(item),
     ...(item.hkttaPast || []).map((row) => hkttaPastAgedOutRow(row, item)).filter(Boolean),
-    ...uEventAgeRows(item),
     ...uLadderFloorRows(item),
     ...compAgeRows(item),
     ...lcsdAgeRows(item),
@@ -1618,7 +1593,7 @@ function isRecordedAge(row) {
   if (!row || !Number.isFinite(row.nowMin)) return false;
   if (row.source === "floor" || row.source === "badge" || row.source === "school" || !row.code) return false;
   if (row.nowMax !== OPEN && Number.isFinite(row.nowMax)) return true;
-  return row.source === "hktta" || row.source === "hktta-past" || row.source === "comp" || row.source === "u-event" || row.source === "u-ladder";
+  return row.source === "hktta" || row.source === "hktta-past" || row.source === "comp" || row.source === "u-ladder";
 }
 
 function recordedAgeBand(item) {
@@ -1673,14 +1648,16 @@ function ageBadge(item) {
   if (resolved.estimated) {
     return `<span class="badge warn">估計${escapeHtml(resolved.label)}</span>`;
   }
-  const lcsd = resolved.lcsd;
-  if (!lcsd?.code) return `<span class="badge ok">${escapeHtml(resolved.label)}</span>`;
-  const bits = [lcsd.code];
-  if (lcsd.period) bits.push(String(lcsd.period));
-  else if (lcsd.year) bits.push(String(lcsd.year));
-  if (lcsd.doubles) bits.push("雙打");
-  if (lcsd.delta) bits.push(`+${lcsd.delta}年`);
-  return `<span class="badge ok">${escapeHtml(`${resolved.label}（${bits.join(" · ")}）`)}</span>`;
+  const row = resolved.lcsd;
+  if (row?.source === "lcsd" && row.code) {
+    const bits = [row.code];
+    if (row.period) bits.push(String(row.period));
+    else if (row.year) bits.push(String(row.year));
+    if (row.doubles) bits.push("雙打");
+    if (row.delta) bits.push(`+${row.delta}年`);
+    return `<span class="badge ok">${escapeHtml(`${resolved.label}（${bits.join(" · ")}）`)}</span>`;
+  }
+  return `<span class="badge ok">${escapeHtml(resolved.label)}</span>`;
 }
 
 function searchLinks(name) {
@@ -2053,6 +2030,7 @@ function renderBadges(records) {
 const COMP_SRC = {
   hkssf: "學界／菁英賽",
   open: "乒總公開賽",
+  youth: "青少年錦標賽",
   hkgames: "全港運動會",
 };
 
@@ -2082,8 +2060,7 @@ function uYearRuns(item) {
 
 function renderUYears(item) {
   const runs = uYearRuns(item);
-  if (!runs.length) return "";
-  if (runs.length < 2 && !(item.uEvents || []).length) return "";
+  if (runs.length < 2) return "";
   const items = runs.map((run) => {
     const span = run.start === run.end ? String(run.start) : `${run.start}–${run.end}`;
     return `<li>${escapeHtml(`${span} · ${run.group}`)}</li>`;
@@ -2149,7 +2126,7 @@ function renderCard(item, totals, orderLabel) {
   const compHtml = renderComp(item.comp || []);
 
   if (!item.matches.length) {
-    const hasExtra = item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length || (item.comp || []).length || (item.uEvents || []).length;
+    const hasExtra = item.lcsd.length || (item.badges || []).length || (item.hkttaPast || []).length || (item.comp || []).length;
     const tone = hasExtra ? "lcsd" : "missing";
     const possible = item.possible || [];
     let miss = (item.hkttaPast || []).length
@@ -2158,8 +2135,6 @@ function renderCard(item, totals, orderLabel) {
       ? "今期乒總公布榜未見精確姓名，但康文署分齡賽程／成績 PDF 有呢個名。"
       : (item.comp || []).length
         ? "今期乒總公布榜未見精確姓名，但學界／乒總公開賽／港運會成績 PDF 有呢個名。"
-        : (item.uEvents || []).length
-        ? "今期乒總公布榜未見精確姓名，但有青少年／學界年齡組別年份紀錄。"
         : (item.badges || []).length
         ? "今期乒總公布榜未見精確姓名，但恒生公開章別考試時間表有呢個名。"
         : "今期乒總公布榜未見精確姓名。可能未註冊、一年無計分賽、或者只打過未公開／未收入嘅地區賽。";
@@ -2533,16 +2508,18 @@ function renderDataMeta() {
   const period = periodLabel();
   const hkssfCount = sourceMeta?.hkssf ?? compIndex.counts?.hkssf ?? 0;
   const openCount = sourceMeta?.open ?? compIndex.counts?.open ?? 0;
+  const youthCount = sourceMeta?.youth ?? compIndex.counts?.youth ?? 0;
   const gamesCount = sourceMeta?.hkgames ?? compIndex.counts?.hkgames ?? 0;
   const compAt = sourceMeta?.compUpdated || compIndex.updated || "";
   const stamp = stampDate(latestUpdated(hkttaAt, lcsdAt, badgeAt, compAt));
-  const extraRow = (hkssfCount || openCount || gamesCount)
+  const extraRow = (hkssfCount || openCount || youthCount || gamesCount)
     ? `<div class="data-meta-grid extra">
       <div class="stat"><span>學界／菁英賽</span><div class="stat-num"><b>${hkssfCount || 0}</b></div></div>
       <div class="stat"><span>乒總公開賽成績</span><div class="stat-num"><b>${openCount || 0}</b></div></div>
+      <div class="stat"><span>青少年錦標賽</span><div class="stat-num"><b>${youthCount || 0}</b></div></div>
       <div class="stat"><span>全港運動會</span><div class="stat-num"><b>${gamesCount || 0}</b></div></div>
     </div>
-    <p class="hint">學界／公開賽／港運會唔計入上面「不重複」人數，只用來補比賽實力。</p>`
+    <p class="hint">學界／公開賽／青少年／港運會唔計入上面「不重複」人數，只用來補比賽實力同 U 組年份。</p>`
     : "";
   meta.innerHTML = `
     <div class="data-meta-grid">
@@ -2768,7 +2745,6 @@ async function runSearch() {
         badges: findBadges(query),
         hkttaPast: findHkttaPast(query),
         comp: findComp(query),
-        uEvents: findUEvents(query),
       };
     });
     setNamesEditorOpen(false);
@@ -2986,20 +2962,18 @@ async function bootLocal(shared) {
   bindUi();
   if (shared.length) await runSearch();
   try {
-    const [lcsdRes, ageMapRes, badgeRes, histRes, compRes, uRes] = await Promise.all([
+    const [lcsdRes, ageMapRes, badgeRes, histRes, compRes] = await Promise.all([
       fetch(dataUrl("lcsd.json")),
       fetch(dataUrl("lcsd_age_maps.json")),
       fetch(dataUrl("badges.json")),
       fetch(dataUrl("hktta_history.json")),
       fetch(dataUrl("comp.json")),
-      fetch(dataUrl("hktta_u_events.json")),
     ]);
     if (lcsdRes.ok) lcsdIndex = await lcsdRes.json();
     if (ageMapRes.ok) lcsdAgeMaps = await ageMapRes.json();
     if (badgeRes.ok) badgeIndex = await badgeRes.json();
     if (histRes.ok) hkttaHistory = await histRes.json();
     if (compRes.ok) compIndex = await compRes.json();
-    if (uRes.ok) uEventsIndex = await uRes.json();
     indexLcsdDocCodes();
     if (!(await loadNameStats())) buildNameStats();
     renderDataMeta();
@@ -3008,9 +2982,8 @@ async function bootLocal(shared) {
         ...item,
         lcsd: findLcsd(item.query),
         badges: findBadges(item.query),
-        hkttaPast: item.hkttaPast || findHkttaPast(item.query),
-        comp: item.comp || findComp(item.query),
-        uEvents: item.uEvents || findUEvents(item.query),
+        hkttaPast: findHkttaPast(item.query),
+        comp: findComp(item.query),
       }));
       renderResults();
     }

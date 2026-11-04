@@ -1,4 +1,4 @@
-"""Download public match-result PDFs: HKSSF, HKTTA opens, Hong Kong Games.
+"""Download public match-result PDFs: HKSSF, HKTTA opens, youth, Hong Kong Games.
 
 PDF / HTML listings only. Does not call HKTTA CGI ranking pages.
 """
@@ -45,7 +45,10 @@ GROUP_RE = re.compile(
     r"(男子[甲乙丙丁戊]組|女子[甲乙丙丁]組|男子單打|女子單打|"
     r"Boys?\s*[ABC]\s*Grade|Girls?\s*[ABC]\s*Grade|"
     r"[男女]子(?:單打)?[ABC]組|小學[男女]子|中學[男女]子|"
-    r"菁英賽|個人賽|學界)"
+    r"菁英賽|個人賽|學界|"
+    r"[男女]子\s*U-?\s*\d+\s*(?:組|單打|雙打)?|"
+    r"U-?\s*(?:9|11|12|13|15|17|18|19|21)\s*(?:組|單打|雙打)?|"
+    r"[男女]子\s*(?:9|11|12|13|15|17|18|19|21)\s*歲)"
 )
 SKIP_PDF_RE = re.compile(
     r"prospectus|entryform|章程|報名|cgi-bin|handbook|notice|guideline|"
@@ -64,6 +67,7 @@ STOPWORDS = {
 
 HKSSF_URL_RE = re.compile(r"tabletennis|table.?tennis|/tt_|乒乓球|jing.?ying|菁英|result.?book", re.I)
 OPEN_URL_RE = re.compile(r"local_hkopen|公開乒乓球|hkopen", re.I)
+YOUTH_URL_RE = re.compile(r"local_hkyouthopen|青少年乒乓球", re.I)
 GAMES_URL_RE = re.compile(r"hongkonggames|hkg20|HKG_PUBLIC|乒乓球|tabletennis|sportid=6", re.I)
 TT_TEXT_RE = re.compile(r"乒\s*乓\s*球|table\s*tennis", re.I)
 
@@ -79,6 +83,11 @@ LISTINGS = {
         "https://www.hktta.org.hk/gameinfo/local/local_hkopen/",
         "https://web.hktta.org.hk/gameinfo/local/local_hkopen_ranking/",
         "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/",
+    ],
+    "youth": [
+        "https://www.hktta.org.hk/gameinfo/local/local_hkyouthopen/",
+        "https://www.hktta.org.hk/gameinfo/local/local_hkyouthopen/index.html",
+        "https://web.hktta.org.hk/gameinfo/local/local_hkyouthopen/",
     ],
     "hkgames": [
         "https://www.hongkonggames.hk/",
@@ -97,6 +106,10 @@ CDX_PREFIXES = {
         "www.hktta.org.hk/gameinfo/local/local_hkopen/",
         "web.hktta.org.hk/gameinfo/local/local_hkopen_ranking/",
         "www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/",
+    ],
+    "youth": [
+        "www.hktta.org.hk/gameinfo/local/local_hkyouthopen/",
+        "web.hktta.org.hk/gameinfo/local/local_hkyouthopen/",
     ],
     "hkgames": [
         "www.hongkonggames.hk/",
@@ -127,7 +140,11 @@ def canon_url(url: str) -> str:
     url = unquote((url or "").replace("&amp;", "&").strip())
     if url.startswith("//"):
         url = "https:" + url
-    return url.split("#")[0]
+    url = url.split("#")[0]
+    if "local_hkyouthopen" in url.lower():
+        url = url.replace("https://web.hktta.org.hk/", "https://www.hktta.org.hk/")
+        url = url.replace("http://web.hktta.org.hk/", "https://www.hktta.org.hk/")
+    return url
 
 
 def abs_url(href: str, base: str) -> str:
@@ -157,6 +174,12 @@ def url_ok(src: str, url: str) -> bool:
         if re.search(r"InitialScore|EntryForm|prospectus|章程|PlayerList|DrawResult|Waiting|Schedule", url, re.I):
             return False
         return bool(OPEN_URL_RE.search(url))
+    if src == "youth":
+        if re.search(r"EntryForm|prospectus|章程|PlayerList|Waiting|Schedule", url, re.I):
+            return False
+        if not YOUTH_URL_RE.search(url):
+            return False
+        return bool(re.search(r"All_Result|all.?result", url, re.I))
     if src == "hkgames":
         return bool(GAMES_URL_RE.search(url))
     return False
@@ -168,6 +191,8 @@ def guess_event(src: str, url: str, year: str, text: str = "") -> str:
         if "排名錦標賽" in head or "ranking" in url.lower():
             return f"{year}全港公開排名錦標賽".strip()
         return f"{year}全港公開乒乓球單項錦標賽".strip()
+    if src == "youth":
+        return f"{year}全港公開青少年乒乓球錦標賽".strip()
     if src == "hkgames":
         edition = ""
         found = re.search(r"第([一二三四五六七八九十兩\d]+)屆", head) or re.search(r"第([一二三四五六七八九十兩\d]+)屆", url)
@@ -192,7 +217,7 @@ def gender_from_group(group: str) -> str:
 
 def empty_store() -> dict:
     return {
-        "source": "學界／乒總公開賽／全港運動會已公布成績 PDF",
+        "source": "學界／乒總公開賽／青少年錦標賽／全港運動會已公布成績 PDF",
         "updated": "",
         "count": 0,
         "documents": [],
@@ -238,6 +263,8 @@ def load_extra() -> list[dict]:
 
 
 def guess_src(url: str) -> str:
+    if YOUTH_URL_RE.search(url) and "hktta" in url.lower():
+        return "youth"
     if OPEN_URL_RE.search(url) and "hktta" in url.lower():
         return "open"
     if "hongkonggames" in url.lower() or "HKG_PUBLIC" in url:
@@ -286,6 +313,22 @@ def guessed_docs() -> list[dict]:
                 "event": f"{year}全港公開乒乓球單項錦標賽",
             }
         )
+        docs.append(
+            {
+                "url": f"https://www.hktta.org.hk/gameinfo/local/local_hkyouthopen/{year}/Result/All_Result.pdf",
+                "src": "youth",
+                "year": y,
+                "event": f"{year}全港公開青少年乒乓球錦標賽",
+            }
+        )
+        docs.append(
+            {
+                "url": f"https://web.hktta.org.hk/gameinfo/local/local_hkyouthopen/{year}/Result/All_Result.pdf",
+                "src": "youth",
+                "year": y,
+                "event": f"{year}全港公開青少年乒乓球錦標賽",
+            }
+        )
         yy = f"{str(year)[2:]}{str(year + 1)[2:]}"
         docs.append(
             {
@@ -296,6 +339,24 @@ def guessed_docs() -> list[dict]:
                 "src": "hkssf",
                 "year": y,
                 "event": f"{year}小學體育比賽成績總冊",
+            }
+        )
+    for year in range(year_now - 14, year_now - 8):
+        y = str(year)
+        docs.append(
+            {
+                "url": f"https://www.hktta.org.hk/gameinfo/local/local_hkyouthopen/{year}/Result/All_Result.pdf",
+                "src": "youth",
+                "year": y,
+                "event": f"{year}全港公開青少年乒乓球錦標賽",
+            }
+        )
+        docs.append(
+            {
+                "url": f"https://web.hktta.org.hk/gameinfo/local/local_hkyouthopen/{year}/Result/All_Result.pdf",
+                "src": "youth",
+                "year": y,
+                "event": f"{year}全港公開青少年乒乓球錦標賽",
             }
         )
     return docs
@@ -324,6 +385,9 @@ def crawl_listings() -> list[dict]:
     for year in range(year_now - 6, year_now + 1):
         pages.append(("open", f"https://web.hktta.org.hk/gameinfo/local/local_hkopen/{year}/", 0))
         pages.append(("open", f"https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/{year}/", 0))
+    for year in range(year_now - 12, year_now + 1):
+        pages.append(("youth", f"https://www.hktta.org.hk/gameinfo/local/local_hkyouthopen/{year}/", 0))
+        pages.append(("youth", f"https://web.hktta.org.hk/gameinfo/local/local_hkyouthopen/{year}/", 0))
     for src, page, depth in pages:
         code, body = http_get(page)
         if code != 200 or not body:
@@ -377,6 +441,61 @@ def _place_columns(row: list) -> list[tuple[int, int]]:
         seen.add(place)
         unique.append((idx, place))
     return unique
+
+
+YOUTH_U_RE = re.compile(r"U-?\s*(9|11|12|13|15|17|18|19|21)", re.I)
+YOUTH_AGE_RE = re.compile(r"(9|11|12|13|15|17|18|19|21)\s*歲")
+COACH_RE = re.compile(r"（[^）]*）|\([^)]*\)")
+
+
+def youth_group_from_header(cell: str, subtitle: str = "") -> str:
+    blob = f"{cell} {subtitle}"
+    match = YOUTH_U_RE.search(blob) or YOUTH_AGE_RE.search(blob)
+    if not match:
+        return ""
+    n = match.group(1)
+    gender = "女子" if re.search(r"女子|Girls", blob, re.I) else "男子" if re.search(r"男子|Boys", blob, re.I) else ""
+    extras = "雙打" if re.search(r"雙打|混雙|Double", blob, re.I) else ""
+    return f"{gender}U{n}組{extras}"
+
+
+def extract_youth_places(pdf) -> list[dict]:
+    out: list[dict] = []
+    for page in pdf.pages:
+        text = page.extract_text() or ""
+        year_match = re.search(r"(20\d{2})\s*全港公開青少年", text[:160])
+        year = year_match.group(1) if year_match else ""
+        for table in page.extract_tables() or []:
+            if not table or len(table[0]) < 3:
+                continue
+            header = [_cell_text(c) for c in table[0]]
+            sub = [_cell_text(c) for c in table[1]] if len(table) > 1 else []
+            groups = [
+                youth_group_from_header(cell, sub[idx] if idx < len(sub) else "")
+                for idx, cell in enumerate(header)
+            ]
+            if sum(1 for group in groups if group) < 2:
+                continue
+            start = 2 if any("歲" in (sub[idx] if idx < len(sub) else "") for idx in range(len(header))) else 1
+            place = 0
+            for row in table[start:]:
+                label = _cell_text(row[0] if row else "").replace("\n", "")
+                for word, value in PLACE_WORD.items():
+                    if word in label:
+                        place = value
+                        break
+                if "前八" in label or "前五" in label:
+                    place = 8
+                if not place:
+                    continue
+                for col, group in enumerate(groups):
+                    if not group or col >= len(row):
+                        continue
+                    cell = COACH_RE.sub(" ", _cell_text(row[col]))
+                    for name in NAME_RE.findall(cell):
+                        if is_person_name(name):
+                            out.append({"name": name, "place": place, "group": group, "year": year})
+    return out
 
 
 def extract_table_places(pdf) -> list[dict]:
@@ -478,10 +597,49 @@ def parse_pdf(path: Path, meta: dict) -> list[dict]:
     chunks = []
     table_rows: list[dict] = []
     with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
-            chunks.append(page.extract_text() or "")
-        table_rows = [] if meta.get("src") == "hkssf" else extract_table_places(pdf)
+        if meta.get("src") == "youth":
+            table_rows = extract_youth_places(pdf)
+            chunks = [(page.extract_text() or "")[:200] for page in pdf.pages[:1]]
+        else:
+            for page in pdf.pages:
+                chunks.append(page.extract_text() or "")
+            table_rows = [] if meta.get("src") == "hkssf" else extract_table_places(pdf)
     text = "\n".join(chunks)
+    if meta.get("src") == "youth":
+        year = meta.get("year") or year_from_blob(meta.get("url") or "", text[:400])
+        event = meta.get("event") or guess_event("youth", meta["url"], year, text)
+        by_name: dict[str, dict] = {}
+
+        def put_youth(row: dict) -> None:
+            name = row.get("name") or ""
+            if not is_person_name(name):
+                return
+            rec_year = str(row.get("year") or year or "")
+            group = row.get("group") or ""
+            key = f"{normalize_name(name)}|{rec_year}|{group}"
+            rec = by_name.get(key)
+            place = row.get("place")
+            if rec and place and rec.get("place") and rec["place"] <= place:
+                return
+            item = {
+                "name": name,
+                "src": "youth",
+                "year": rec_year,
+                "event": f"{rec_year}全港公開青少年乒乓球錦標賽" if rec_year else event,
+                "group": group,
+                "kind": "result",
+                "url": meta["url"],
+            }
+            if place:
+                item["place"] = place
+            gender = gender_from_group(group)
+            if gender:
+                item["gender"] = gender
+            by_name[key] = item
+
+        for row in table_rows:
+            put_youth(row)
+        return list(by_name.values())
     if meta.get("src") == "hkssf":
         text = tt_section(text)
         if not text:
@@ -527,11 +685,11 @@ def parse_pdf(path: Path, meta: dict) -> list[dict]:
 
     for row in table_rows:
         put(row)
-        if meta.get("src") in {"open", "hkgames"} and row.get("school") and is_person_name(row["school"]):
+        if meta.get("src") in {"open", "youth", "hkgames"} and row.get("school") and is_person_name(row["school"]):
             put({**row, "name": row["school"], "school": ""})
     for row in extract_text_places(text):
         put(row)
-        if meta.get("src") in {"open", "hkgames"} and row.get("school") and is_person_name(row["school"]):
+        if meta.get("src") in {"open", "youth", "hkgames"} and row.get("school") and is_person_name(row["school"]):
             put({**row, "name": row["school"], "school": ""})
     if meta.get("src") == "hkgames":
         for row in extract_games_entries(text):
@@ -604,6 +762,16 @@ def main() -> None:
             body = get_pdf(url, wayback=True)
             if not body:
                 print("  skip (no pdf)")
+                if url not in parsed_urls:
+                    parsed_docs.append(
+                        {
+                            "url": url,
+                            "src": meta["src"],
+                            "year": meta.get("year") or "",
+                            "names": 0,
+                        }
+                    )
+                    parsed_urls.add(url)
                 continue
             path = tmp_dir / f"{i}.pdf"
             path.write_bytes(body)
@@ -644,13 +812,13 @@ def main() -> None:
     print(f"kept {kept} historical rows")
 
     payload = {
-        "source": "學界／乒總公開賽／全港運動會已公布成績 PDF",
+        "source": "學界／乒總公開賽／青少年錦標賽／全港運動會已公布成績 PDF",
         "updated": now_stamp(),
         "count": len(players),
         "prevCount": old.get("count"),
         "counts": {
             src: sum(1 for recs in players.values() if any(r.get("src") == src for r in recs))
-            for src in ("hkssf", "open", "hkgames")
+            for src in ("hkssf", "open", "youth", "hkgames")
         },
         "documents": parsed_docs,
         "players": players,

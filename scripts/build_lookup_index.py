@@ -12,7 +12,6 @@ LCSD = ROOT / "data" / "lcsd.json"
 BADGES = ROOT / "data" / "badges.json"
 HISTORY = ROOT / "data" / "hktta_history.json"
 COMP = ROOT / "data" / "comp.json"
-U_EVENTS = ROOT / "data" / "hktta_u_events.json"
 OUT_DIR = ROOT / "data" / "idx" / "s"
 READY = ROOT / "data" / "idx" / "_ready.json"
 HKT = timezone(timedelta(hours=8))
@@ -58,9 +57,6 @@ def main() -> None:
     comp = load(COMP)
     for name, recs in (comp.get("players") or {}).items():
         put(shards, norm(name), "c", recs)
-    u_events = load(U_EVENTS)
-    for name, recs in (u_events.get("players") or {}).items():
-        put(shards, norm(name), "u", recs)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for old in OUT_DIR.glob("*.json"):
