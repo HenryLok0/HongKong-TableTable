@@ -8580,7 +8580,27 @@
           "doubles": true
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/20_pro_b5_Prospectus_for_Racket_Games_2026-27_(Chi)_DAG_Table_Tennis_Competition_2026_Final.pdf": {
+      "source": "prospectus",
+      "groups": {
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
+    },
+    "沙田|2026": {
+      "source": "prospectus",
+      "groups": {
+        "MJ": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
     }
   },
-  "updated": "2026-11-05 06:08"
+  "updated": "2026-11-06 06:15"
 }
