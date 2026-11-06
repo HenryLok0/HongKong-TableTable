@@ -283,6 +283,26 @@
           "ageMin": 0,
           "ageMax": 9,
           "doubles": false
+        },
+        "FA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FXA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": true
+        },
+        "FXE": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
         }
       }
     },
@@ -8600,7 +8620,52 @@
           "doubles": false
         }
       }
+    },
+    "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/2_res_b5_Result_2026.pdf": {
+      "source": "result",
+      "groups": {
+        "MA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MXA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FA": {
+          "ageMin": 65,
+          "ageMax": null,
+          "doubles": false
+        },
+        "FXA": {
+          "ageMin": 55,
+          "ageMax": null,
+          "doubles": false
+        },
+        "MK": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": true
+        },
+        "MXE": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        },
+        "FK": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": true
+        },
+        "FXE": {
+          "ageMin": 0,
+          "ageMax": 9,
+          "doubles": false
+        }
+      }
     }
   },
-  "updated": "2026-11-06 06:15"
+  "updated": "2026-11-07 05:46"
 }
