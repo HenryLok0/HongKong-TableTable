@@ -14,7 +14,7 @@ const BUCKETS = [
 ];
 
 const OPEN = Infinity;
-const MAX_NAMES = 400;
+const MAX_NAMES = 1000;
 const SEARCH_LABEL = "查詢名單";
 
 const AGE_BANDS = [

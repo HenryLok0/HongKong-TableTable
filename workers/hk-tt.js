@@ -1,6 +1,6 @@
 const GITHUB_BASE = "https://henrylok0.github.io/HongKong-TableTable/";
 const SITE_ORIGIN = "https://hktt.henrylok.me";
-const MAX_NAMES = 400;
+const MAX_NAMES = 1000;
 const SHORT_ID_LEN = 8;
 // Snapshots update about once a day. Keep the in-memory lookup index for an hour.
 const INDEX_TTL_MS = 60 * 60 * 1000;
