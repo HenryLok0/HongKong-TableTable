@@ -688,9 +688,26 @@ button:disabled {
 }
 
 .badge-group > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 700;
   color: var(--heading);
+}
+
+.badge-sitting {
+  min-width: 0;
+}
+
+.badge a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.badge a:hover {
+  text-decoration: underline;
 }
 
 .badge-code-hint {

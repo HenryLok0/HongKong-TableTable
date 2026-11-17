@@ -1738,9 +1738,19 @@ function lcsdPlaceChip(place, group) {
   return `<span class="badge ${lcsdPlaceTone(place)}">${escapeHtml(text)}</span>`;
 }
 
-function lcsdIsFixture(rec) {
-  const url = String(rec.url || "").toLowerCase();
-  return /fixture/.test(url) || /_draw/.test(url) || /draw_/.test(url);
+function lcsdIsResult(rec) {
+  return rec.kind === "result" || Boolean(rec.place);
+}
+
+function lcsdIsUnplaced(rec) {
+  if (lcsdIsResult(rec)) return false;
+  const year = recYear(rec);
+  const now = Number(currentHktYear());
+  return year > 0 && year < now;
+}
+
+function lcsdUnplacedChip() {
+  return `<span class="badge miss">冇上榜</span>`;
 }
 
 function lcsdLangRank(url) {
@@ -1752,7 +1762,8 @@ function lcsdLangRank(url) {
 
 function lcsdRowScore(rec) {
   const place = Number(rec.place);
-  return (rec.place ? 20 : 0)
+  return (lcsdIsResult(rec) ? 100 : 0)
+    + (rec.place ? 20 : 0)
     + (rec.group ? 8 : 0)
     + (rec.district ? 2 : 0)
     + lcsdLangRank(rec.url)
@@ -1760,15 +1771,14 @@ function lcsdRowScore(rec) {
 }
 
 function lcsdMergeKey(rec) {
-  const kind = rec.kind === "result" && rec.place ? "result" : (rec.kind || "other");
-  if (rec.district || rec.year) return `${rec.district || ""}|${rec.year || ""}|${kind}`;
+  // One row per district + year; score prefers 成績 over 賽程表.
+  if (rec.district || rec.year) return `${rec.district || ""}|${rec.year || ""}`;
   return String(rec.url || "");
 }
 
 function visibleLcsdRecords(records) {
   const byKey = new Map();
   for (const rec of records || []) {
-    if (lcsdIsFixture(rec)) continue;
     const key = lcsdMergeKey(rec);
     const prev = byKey.get(key);
     if (!prev || lcsdRowScore(rec) > lcsdRowScore(prev)) byKey.set(key, rec);
@@ -1900,17 +1910,40 @@ function badgeCodeMeaning(rec) {
   return bits;
 }
 
-function formatBadgeOutcome(rec) {
-  const techWord = partWord(rec.tech, rec);
-  const writtenWord = partWord(rec.written, rec);
-  if (techWord || writtenWord) {
-    const parts = [];
-    if (rec.carry && techWord) parts.push(`技術試已於${rec.carry}合格`);
-    else if (techWord) parts.push(`技術試${techWord}`);
-    if (writtenWord) parts.push(`筆試${writtenWord}`);
-    return parts.join(" · ");
+function badgeOutcomeParts(rec) {
+  const parts = sittingPartsFromCode(rec).filter((part) => part !== "削球");
+  const fallback = sittingOutcome(rec);
+  const out = [];
+  if (parts.includes("技術試")) {
+    const techWord = partWord(rec.tech, rec);
+    if (rec.carry) out.push(`技術試已於${rec.carry}合格`);
+    else if (techWord) out.push(`技術試 ${techWord}`);
+    else if (fallback) out.push(`技術試 ${fallback}`);
   }
-  return sittingOutcome(rec);
+  if (parts.includes("筆試")) {
+    const writtenWord = partWord(rec.written, rec);
+    if (writtenWord) out.push(`筆試 ${writtenWord}`);
+    else if (fallback) out.push(`筆試 ${fallback}`);
+  }
+  if (parts.includes("體能") && fallback) out.push(`體能 ${fallback}`);
+  if (out.length) return out;
+  return fallback ? [fallback] : [];
+}
+
+function formatBadgeOutcome(rec) {
+  return badgeOutcomeParts(rec).join(" · ");
+}
+
+function badgeOutcomeTone(text) {
+  const t = String(text || "");
+  if (/未合格|缺席|未見/.test(t)) return "miss";
+  if (t.includes("合格")) return "ok";
+  return "warn";
+}
+
+function badgeOutcomeChip(text, href, title) {
+  const body = href ? badgeHref(href, text, title) : escapeHtml(text);
+  return `<span class="badge ${badgeOutcomeTone(text)}">${body}</span>`;
 }
 
 function formatBadgeSitting(rec) {
@@ -1938,19 +1971,14 @@ function renderBadgeSittingRow(rec) {
   const bits = [];
   if (rec.session) bits.push(escapeHtml(rec.session));
   const codeText = formatBadgeCode(rec.code);
-  const meaning = badgeCodeMeaning(rec);
-  if (codeText) {
-    const codeHtml = badgeHref(rec.listUrl, codeText, "時間表考生編號");
-    const hint = meaning.length ? `<span class="badge-code-hint">（${escapeHtml(meaning.join(" · "))}）</span>` : "";
-    bits.push(`${codeHtml}${hint}`);
-  } else if (isChopBadge(rec)) {
-    bits.push(escapeHtml("削球"));
-  }
-  const outcome = formatBadgeOutcome(rec);
+  if (codeText) bits.push(badgeHref(rec.listUrl, codeText, "時間表考生編號"));
+  else if (isChopBadge(rec)) bits.push(escapeHtml("削球"));
   const hasResult = rec.passed != null || rec.absent || rec.tech != null || rec.written != null;
   const resultHref = hasResult ? rec.url || rec.listUrl : "";
-  if (outcome) bits.push(badgeHref(resultHref, outcome, hasResult ? "成績單" : ""));
-  return `<li>${bits.filter(Boolean).join(" · ")}</li>`;
+  const chips = badgeOutcomeParts(rec)
+    .map((text) => badgeOutcomeChip(text, resultHref, hasResult ? "成績單" : ""))
+    .join("");
+  return `<li><span class="badge-sitting">${bits.filter(Boolean).join(" · ")}</span>${chips}</li>`;
 }
 
 function groupBadgeRecords(records) {
@@ -2015,9 +2043,10 @@ function renderBadges(records) {
   const main = [];
   const lower = [];
   for (const group of groups) {
-    const title = `${group.label}${group.awarded ? "（已考獲）" : "（未齊件）"}`;
+    const status = group.awarded ? "已考獲" : "未齊件";
+    const tone = group.awarded ? "ok" : "miss";
     const rows = group.rows.map((rec) => renderBadgeSittingRow(rec)).join("");
-    const html = `<div class="badge-group"><span>${escapeHtml(title)}</span><ul>${rows}</ul></div>`;
+    const html = `<div class="badge-group"><span>${escapeHtml(group.label)} <span class="badge ${tone}">${status}</span></span><ul>${rows}</ul></div>`;
     if (highestAwarded && group.rank < highestAwarded) lower.push(html);
     else main.push(html);
   }
@@ -2099,7 +2128,7 @@ function renderLcsd(records) {
   const items = sorted
     .map((r) => {
       const bits = [r.district, r.year, lcsdKindLabel(r.kind), r.group].filter(Boolean);
-      const chip = r.kind === "result" ? lcsdPlaceChip(r.place) : "";
+      const chip = lcsdIsResult(r) ? lcsdPlaceChip(r.place) : (lcsdIsUnplaced(r) ? lcsdUnplacedChip() : "");
       return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a>${chip}</li>`;
     })
     .join("");
