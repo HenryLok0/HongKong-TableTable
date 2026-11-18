@@ -1933,8 +1933,8 @@ function badgeCodeMeaning(rec) {
 function carriedTechLabel(carry) {
   const match = String(carry || "").match(/^(\d{4})-(\d{2})$/);
   if (!match) return `技術試於${carry}考獲`;
-  // Slip dates name the earlier sitting by year and month: 2017年12.
-  return `技術試於${match[1]}年${Number(match[2])}考獲`;
+  // Slip dates name the earlier sitting by year and month: 2017年12月.
+  return `技術試於${match[1]}年${Number(match[2])}月考獲`;
 }
 
 function badgeOutcomeParts(rec) {
