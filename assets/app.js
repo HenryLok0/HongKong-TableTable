@@ -1930,6 +1930,13 @@ function badgeCodeMeaning(rec) {
   return bits;
 }
 
+function carriedTechLabel(carry) {
+  const match = String(carry || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) return `技術試於${carry}考獲`;
+  // Slip dates name the earlier sitting by year and month: 2017年12.
+  return `技術試於${match[1]}年${Number(match[2])}考獲`;
+}
+
 function badgeOutcomeParts(rec) {
   const parts = sittingPartsFromCode(rec).filter((part) => part !== "削球");
   const hasTech = rec.tech === true || rec.tech === false;
@@ -1941,7 +1948,8 @@ function badgeOutcomeParts(rec) {
   const showWritten = hasWritten || parts.includes("筆試");
   const out = [];
   if (showTech) {
-    if (rec.carry) out.push(`技術試已於${rec.carry}合格`);
+    // A carried technical pass names the earlier year and month on every later sitting.
+    if (rec.carry) out.push(carriedTechLabel(rec.carry));
     else {
       const techWord = partWord(rec.tech, rec);
       if (techWord) out.push(`技術試 ${techWord}`);
@@ -1965,7 +1973,7 @@ function formatBadgeOutcome(rec) {
 function badgeOutcomeTone(text) {
   const t = String(text || "");
   if (/未合格|缺席|未見/.test(t)) return "miss";
-  if (t.includes("合格")) return "ok";
+  if (t.includes("合格") || t.includes("考獲")) return "ok";
   return "warn";
 }
 
@@ -2013,14 +2021,15 @@ function groupBadgeRecords(records) {
   const groups = new Map();
   for (const rec of records || []) {
     const label = badgeDisplayName(rec) || rec.badge || "章別";
-    const awarded = rec.passed === true;
-    const key = `${isChopBadge(rec) ? "chop" : "std"}|${badgeRank(label)}|${label}|${awarded ? "y" : "n"}`;
+    const key = `${isChopBadge(rec) ? "chop" : "std"}|${badgeRank(label)}|${label}`;
     if (!groups.has(key)) {
-      groups.set(key, { label, rank: badgeRank(label), awarded, rows: [] });
+      groups.set(key, { label, rank: badgeRank(label), rows: [] });
     }
     groups.get(key).rows.push(rec);
   }
   for (const group of groups.values()) {
+    // One block once the badge is awarded, including earlier sittings that missed a paper.
+    group.awarded = group.rows.some((rec) => rec.passed === true);
     group.rows.sort((a, b) => String(b.session).localeCompare(String(a.session)));
   }
   return [...groups.values()].sort((a, b) => b.rank - a.rank || Number(b.awarded) - Number(a.awarded) || a.label.localeCompare(b.label, "zh-HK"));
@@ -2064,24 +2073,42 @@ function badgeChip(item) {
   return `<span class="badge ${badgeTone(badgeId(name))}">${escapeHtml(text)}</span>`;
 }
 
+function careerBestRank(item, player) {
+  const ranks = [];
+  const now = player ? overall(player)?.rank : null;
+  if (typeof now === "number") ranks.push(now);
+  for (const row of pastHeadlineRows(item.hkttaPast || [])) {
+    if (row.group === "ALL" && typeof row.rank === "number") ranks.push(row.rank);
+  }
+  return ranks.length ? Math.min(...ranks) : null;
+}
+
+function bestRankChip(item, player) {
+  const best = careerBestRank(item, player);
+  if (typeof best !== "number") return "";
+  return `<span class="badge ok">最高排名 ${best}</span>`;
+}
+
+function identityChips(item, player, bucket) {
+  const bucketText = divisionLabel(bucket);
+  return [
+    genderBadge(item),
+    ageBadge(item),
+    bucketText ? `<span class="badge ${bucketTone(bucket)}">${escapeHtml(bucketText)}</span>` : "",
+    badgeChip(item),
+    bestRankChip(item, player),
+  ].join("");
+}
+
 function renderBadges(records) {
   if (!records.length) return "";
-  const groups = groupBadgeRecords(records);
-  const highestAwarded = Math.max(0, ...groups.filter((group) => group.awarded).map((group) => group.rank));
-  const main = [];
-  const lower = [];
-  for (const group of groups) {
+  const groups = groupBadgeRecords(records).map((group) => {
     const status = group.awarded ? "已考獲" : "未齊件";
     const tone = group.awarded ? "ok" : "miss";
     const rows = group.rows.map((rec) => renderBadgeSittingRow(rec)).join("");
-    const html = `<div class="badge-group"><span>${escapeHtml(group.label)} <span class="badge ${tone}">${status}</span></span><ul>${rows}</ul></div>`;
-    if (highestAwarded && group.rank < highestAwarded) lower.push(html);
-    else main.push(html);
-  }
-  const lowerHtml = lower.length
-    ? `<details class="badge-lower"><summary>較低章別</summary>${lower.join("")}</details>`
-    : "";
-  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span>${main.join("")}${lowerHtml}<p class="hint badge-code-note">考生編號由時間表編配；成績單用同一編號對人、唔寫中文名。撳編號開時間表，撳成績開成績單。首字母＝章別（G 金章、P 白金），後加字母＝今場考邊科（C／W 筆試、S 技術試、B 體能）。</p></div>`;
+    return `<div class="badge-group"><span>${escapeHtml(group.label)} <span class="badge ${tone}">${status}</span></span><ul>${rows}</ul></div>`;
+  }).join("");
+  return `<div class="lcsd-box"><span>恒生乒乓球學院公開章別考試</span>${groups}<p class="hint badge-code-note">考生編號由時間表編配；成績單用同一編號對人、唔寫中文名。撳編號開時間表，撳成績開成績單。首字母＝章別（G 金章、P 白金），後加字母＝今場考邊科（C／W 筆試、S 技術試、B 體能）。</p></div>`;
 }
 
 const COMP_SRC = {
@@ -2186,7 +2213,6 @@ function genderBadge(item) {
 
 function renderCard(item, totals, orderLabel) {
   const bucket = classify(item);
-  const bucketText = divisionLabel(bucket);
   const lcsdHtml = renderLcsd(item.lcsd);
   const badgeHtml = renderBadges(item.badges || []);
   const pastHtml = renderHkttaPast(item.hkttaPast || []);
@@ -2213,10 +2239,7 @@ function renderCard(item, totals, orderLabel) {
       <div class="card-top">
         <div>
           <h2>${escapeHtml(item.query)}</h2>
-          ${genderBadge(item)}
-          ${ageBadge(item)}
-          ${badgeChip(item)}
-          <span class="badge ${bucketTone(bucket)}">${escapeHtml(bucketText)}</span>
+          ${identityChips(item, null, bucket)}
         </div>
         <div>${escapeHtml(orderLabel)}</div>
       </div>
@@ -2237,10 +2260,7 @@ function renderCard(item, totals, orderLabel) {
         <div class="card-top">
           <div>
             <h2><button type="button" class="name-link" data-hktta="${escapeHtml(player.name)}">${escapeHtml(player.name)}</button></h2>
-            ${genderBadge(item)}
-            ${ageBadge(item)}
-            ${badgeChip(item)}
-            <span class="badge ${bucketTone(bucket)}">${escapeHtml(bucketText)}</span>
+            ${identityChips(item, player, bucket)}
           </div>
           <div>${escapeHtml(orderLabel)}</div>
         </div>
@@ -3019,7 +3039,7 @@ async function bootLocal(shared) {
     const [lcsdRes, ageMapRes, badgeRes, histRes, compRes] = await Promise.all([
       fetch(dataUrl("lcsd.json")),
       fetch(dataUrl("lcsd_age_maps.json")),
-      fetch(dataUrl("badges.json")),
+      fetch(`${dataUrl("badges.json")}?v=20261118l`),
       fetch(dataUrl("hktta_history.json")),
       fetch(dataUrl("comp.json")),
     ]);
