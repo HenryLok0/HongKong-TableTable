@@ -1912,15 +1912,23 @@ function badgeCodeMeaning(rec) {
 
 function badgeOutcomeParts(rec) {
   const parts = sittingPartsFromCode(rec).filter((part) => part !== "削球");
+  const hasTech = rec.tech === true || rec.tech === false;
+  const hasWritten = rec.written === true || rec.written === false;
   const fallback = sittingOutcome(rec);
+  // Result slips list two scores even when the candidate code is only "D2".
+  // A written-only code stores that single score on tech, so do not relabel it.
+  const showTech = Boolean(rec.carry) || (hasTech && (hasWritten || parts.includes("技術試")));
+  const showWritten = hasWritten || parts.includes("筆試");
   const out = [];
-  if (parts.includes("技術試")) {
-    const techWord = partWord(rec.tech, rec);
+  if (showTech) {
     if (rec.carry) out.push(`技術試已於${rec.carry}合格`);
-    else if (techWord) out.push(`技術試 ${techWord}`);
-    else if (fallback) out.push(`技術試 ${fallback}`);
+    else {
+      const techWord = partWord(rec.tech, rec);
+      if (techWord) out.push(`技術試 ${techWord}`);
+      else if (fallback) out.push(`技術試 ${fallback}`);
+    }
   }
-  if (parts.includes("筆試")) {
+  if (showWritten) {
     const writtenWord = partWord(rec.written, rec);
     if (writtenWord) out.push(`筆試 ${writtenWord}`);
     else if (fallback) out.push(`筆試 ${fallback}`);
