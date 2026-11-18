@@ -656,6 +656,10 @@ button:disabled {
   color: var(--muted);
 }
 
+.lcsd-more {
+  margin-top: 6px;
+}
+
 .lcsd-box summary {
   display: flex;
   flex-wrap: wrap;

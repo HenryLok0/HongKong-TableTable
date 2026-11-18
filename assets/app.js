@@ -1096,6 +1096,24 @@ function pastHeadlineRows(rows) {
   return [...byKey.values()].sort((a, b) => String(b.period).localeCompare(String(a.period)));
 }
 
+const PAST_RECENT_PERIODS = 5;
+const LCSD_RECENT_YEARS = 3;
+
+function pastBestRow(headline) {
+  let best = null;
+  for (const row of headline) {
+    if (typeof row.rank !== "number") continue;
+    if (!best || row.rank < best.rank) best = row;
+  }
+  return best;
+}
+
+function pastPrevRow(headline, row) {
+  const idx = headline.indexOf(row);
+  if (idx < 0) return null;
+  return headline.slice(idx + 1).find((item) => !row.gender || !item.gender || item.gender === row.gender) || null;
+}
+
 function pastPeriodDeltaHtml(row, prev) {
   if (!prev) return "";
   const bits = [];
@@ -1114,32 +1132,34 @@ function pastPeriodDeltaHtml(row, prev) {
   return bits.length ? ` <span class="past-delta">(${bits.join(" · ")})</span>` : "";
 }
 
-function renderHkttaPast(rows, open = false) {
+function pastRowHtml(headline, row) {
+  const prev = pastPrevRow(headline, row);
+  const bits = [
+    row.period,
+    row.gender === "F" ? "女子" : row.gender === "M" ? "男子" : "",
+    PAST_GROUP[row.group] || row.group,
+    row.rank != null ? `第${row.rank}` : "",
+    row.points != null ? `${row.points}分` : "",
+  ].filter(Boolean);
+  return `<li>${escapeHtml(bits.join(" · "))}${pastPeriodDeltaHtml(row, prev)}</li>`;
+}
+
+function renderHkttaPast(rows) {
   if (!rows.length) return "";
   const headline = pastHeadlineRows(rows);
-  const items = headline.map((r, idx) => {
-    const prev = headline.slice(idx + 1).find((row) => !r.gender || !row.gender || row.gender === r.gender);
-    const bits = [
-      r.period,
-      r.gender === "F" ? "女子" : r.gender === "M" ? "男子" : "",
-      PAST_GROUP[r.group] || r.group,
-      r.rank != null ? `第${r.rank}` : "",
-      r.points != null ? `${r.points}分` : "",
-    ].filter(Boolean);
-    return `<li>${escapeHtml(bits.join(" · "))}${pastPeriodDeltaHtml(r, prev)}</li>`;
-  }).join("");
-  const periods = headline.map((r) => r.period).filter(Boolean);
+  const best = pastBestRow(headline);
+  const picked = new Set(headline.slice(0, PAST_RECENT_PERIODS));
+  if (best) picked.add(best);
+  const visible = headline.filter((row) => picked.has(row));
+  const older = headline.filter((row) => !picked.has(row));
+  const periods = headline.map((row) => row.period).filter(Boolean);
   const span = periods.length > 1 ? `${periods[periods.length - 1]} 至 ${periods[0]}` : (periods[0] || "");
-  const best = Math.min(...headline.filter((r) => typeof r.rank === "number").map((r) => r.rank));
-  const bestText = Number.isFinite(best) && best !== Infinity ? ` · 總榜最好第${best}` : "";
+  const bestText = best ? ` · 總榜最好第${best.rank}` : "";
   const title = `乒總過往 ${span}（${headline.length} 期${bestText}）`.replace(/\s+/g, " ").trim();
-  if (!open && headline.length > 8) {
-    return `<div class="lcsd-box"><details><summary>${escapeHtml(title)}</summary><ul>${items}</ul></details></div>`;
-  }
-  if (open) {
-    return `<div class="lcsd-box"><details open><summary>${escapeHtml(title)}</summary><ul>${items}</ul></details></div>`;
-  }
-  return `<div class="lcsd-box"><span>${escapeHtml(title)}</span><ul>${items}</ul></div>`;
+  const olderHtml = older.length
+    ? `<details class="lcsd-more"><summary>較早期數（${older.length} 期）</summary><ul>${older.map((row) => pastRowHtml(headline, row)).join("")}</ul></details>`
+    : "";
+  return `<div class="lcsd-box"><span>${escapeHtml(title)}</span><ul>${visible.map((row) => pastRowHtml(headline, row)).join("")}</ul>${olderHtml}</div>`;
 }
 
 function lcsdGenderFromGroup(rec) {
@@ -2128,20 +2148,31 @@ function renderComp(records) {
   return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${items}</ul></div>`;
 }
 
+function lcsdItemHtml(rec) {
+  const bits = [rec.district, rec.year, lcsdKindLabel(rec.kind), rec.group].filter(Boolean);
+  const chip = lcsdIsResult(rec) ? lcsdPlaceChip(rec.place) : (lcsdIsUnplaced(rec) ? lcsdUnplacedChip() : "");
+  return `<li><a href="${rec.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a>${chip}</li>`;
+}
+
 function renderLcsd(records) {
   const sorted = visibleLcsdRecords(records);
   if (!sorted.length) return "";
+  const newest = Math.max(...sorted.map((rec) => recYear(rec)), 0);
+  const floor = newest ? newest - (LCSD_RECENT_YEARS - 1) : 0;
+  const recent = [];
+  const older = [];
+  for (const rec of sorted) {
+    const year = recYear(rec);
+    if (!year || year >= floor) recent.push(rec);
+    else older.push(rec);
+  }
   const latest = latestLcsdResult(sorted);
   const titleChip = latest ? ` ${lcsdPlaceChip(latest.place, latest.group)}` : "";
-  const items = sorted
-    .map((r) => {
-      const bits = [r.district, r.year, lcsdKindLabel(r.kind), r.group].filter(Boolean);
-      const chip = lcsdIsResult(r) ? lcsdPlaceChip(r.place) : (lcsdIsUnplaced(r) ? lcsdUnplacedChip() : "");
-      return `<li><a href="${r.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a>${chip}</li>`;
-    })
-    .join("");
   const title = `康文署地區分齡紀錄（${sorted.length} 項）`;
-  return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${items}</ul></div>`;
+  const olderHtml = older.length
+    ? `<details class="lcsd-more"><summary>較早紀錄（${older.length} 項）</summary><ul>${older.map((rec) => lcsdItemHtml(rec)).join("")}</ul></details>`
+    : "";
+  return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${recent.map((rec) => lcsdItemHtml(rec)).join("")}</ul>${olderHtml}</div>`;
 }
 
 function genderBadge(item) {
@@ -2158,7 +2189,7 @@ function renderCard(item, totals, orderLabel) {
   const bucketText = divisionLabel(bucket);
   const lcsdHtml = renderLcsd(item.lcsd);
   const badgeHtml = renderBadges(item.badges || []);
-  const pastHtml = renderHkttaPast(item.hkttaPast || [], !item.matches.length);
+  const pastHtml = renderHkttaPast(item.hkttaPast || []);
   const uYearHtml = renderUYears(item);
   const compHtml = renderComp(item.comp || []);
 
