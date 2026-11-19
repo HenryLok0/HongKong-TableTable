@@ -1743,11 +1743,14 @@ function lcsdPlaceTone(place) {
   return "";
 }
 
-function lcsdPlaceChip(place, group) {
+function lcsdPlaceChip(place, group, url) {
   const label = lcsdPlaceLabel(place);
   if (!label) return "";
   const text = [group, label].filter(Boolean).join(" ");
-  return `<span class="badge ${lcsdPlaceTone(place)}">${escapeHtml(text)}</span>`;
+  const body = escapeHtml(text);
+  const cls = `badge ${lcsdPlaceTone(place)}`.trim();
+  if (!url) return `<span class="${cls}">${body}</span>`;
+  return `<a class="${cls}" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${body}</a>`;
 }
 
 function lcsdIsResult(rec) {
@@ -1804,6 +1807,9 @@ function lcsdIsDoubles(rec) {
 
 function lcsdStrokeLabel(rec) {
   const code = String(rec.group || "").toUpperCase();
+  const stored = String(rec.stroke || "");
+  // Winner lists sometimes spell 男子單打 and the age instead of a letter code.
+  if (!code && stored) return stored;
   const event = String(rec.event || "");
   const mixed = code.startsWith("O") || /混合/.test(event);
   if (!code && !mixed) return "";
@@ -1855,6 +1861,72 @@ function visibleLcsdRecords(records) {
     if (years) return years;
     return String(a.district || "").localeCompare(String(b.district || ""), "zh-HK");
   });
+}
+
+function lcsdLoosePlace(recs) {
+  // Some result PDFs name the place and leave the group blank.
+  let best = null;
+  for (const rec of recs) {
+    if (String(rec.group || "").trim() || !rec.place) continue;
+    if (!best || lcsdRowScore(rec) > lcsdRowScore(best)) best = rec;
+  }
+  return best;
+}
+
+function lcsdHasOwnEvent(rec) {
+  return Boolean(rec && (rec.stroke || rec.ageMin != null));
+}
+
+function lcsdSameEvent(a, b) {
+  if (lcsdStrokeLabel(a) !== lcsdStrokeLabel(b)) return false;
+  const left = lcsdEventBounds(a);
+  const right = lcsdEventBounds(b);
+  if (!left || !right) return false;
+  const maxOf = (bounds) => (bounds.max === OPEN || !Number.isFinite(Number(bounds.max)) ? null : Number(bounds.max));
+  return Number(left.min) === Number(right.min) && maxOf(left) === maxOf(right);
+}
+
+function lcsdWithPlace(event, loose) {
+  const merged = {
+    ...event,
+    place: loose.place,
+    kind: "result",
+    url: loose.url || event.url,
+  };
+  if (merged.ageMin == null && loose.ageMin != null) {
+    merged.ageMin = loose.ageMin;
+    merged.ageMax = loose.ageMax;
+  }
+  return merged;
+}
+
+function lcsdBundleView(recs) {
+  const loose = lcsdLoosePlace(recs);
+  const grouped = recs.filter((rec) => String(rec.group || "").trim());
+  if (!loose) return { events: recs, headPlace: null };
+  if (lcsdHasOwnEvent(loose)) {
+    const open = grouped.filter((rec) => !rec.place && lcsdStrokeLabel(rec) === lcsdStrokeLabel(loose));
+    const ageMatch = open.filter((rec) => lcsdSameEvent(rec, loose));
+    const unlabeled = open.filter((rec) => !lcsdEventBounds(rec));
+    // Same stroke and age, or the only schedule of that stroke has no age of its own.
+    const match = ageMatch.length === 1 ? ageMatch : (ageMatch.length === 0 && unlabeled.length === 1 ? unlabeled : []);
+    if (match.length === 1) {
+      return {
+        events: grouped.map((rec) => (rec === match[0] ? lcsdWithPlace(rec, loose) : rec)),
+        headPlace: null,
+      };
+    }
+    if (!grouped.length) return { events: [loose], headPlace: null };
+    return { events: [...grouped, loose], headPlace: null };
+  }
+  // One event that year: the blank-group place belongs to it.
+  if (grouped.length === 1 && !grouped[0].place) {
+    return { events: [lcsdWithPlace(grouped[0], loose)], headPlace: null };
+  }
+  // Several events, and the result never named which one: keep the place on the year.
+  if (grouped.length > 1) return { events: grouped, headPlace: loose };
+  if (!grouped.length) return { events: [], headPlace: loose };
+  return { events: grouped, headPlace: null };
 }
 
 function lcsdBundles(records) {
@@ -2265,14 +2337,18 @@ function lcsdEventHtml(rec) {
 }
 
 function lcsdBundleHtml(recs) {
+  const view = lcsdBundleView(recs);
   const head = [recs[0].district, recs[0].year].filter(Boolean).join(" · ");
-  const allUnplaced = recs.every((rec) => lcsdIsUnplaced(rec));
-  const events = recs.map((rec) => {
-    const chip = !allUnplaced && lcsdIsUnplaced(rec) && !(lcsdIsResult(rec) && rec.place) ? lcsdUnplacedChip() : "";
+  const headChip = view.headPlace ? lcsdPlaceChip(view.headPlace.place, "", view.headPlace.url) : "";
+  // A blank-group place already covers the year, so the schedule must not also say 冇上榜.
+  const yearCovered = Boolean(view.headPlace);
+  const allUnplaced = !yearCovered && view.events.length > 0 && view.events.every((rec) => lcsdIsUnplaced(rec));
+  const events = view.events.map((rec) => {
+    const chip = !yearCovered && !allUnplaced && lcsdIsUnplaced(rec) ? lcsdUnplacedChip() : "";
     return lcsdEventHtml(rec) + chip;
   }).join("");
   const tail = allUnplaced ? lcsdUnplacedChip() : "";
-  return `<li><span>${escapeHtml(head)}</span>${events}${tail}</li>`;
+  return `<li><span>${escapeHtml(head)}</span>${headChip}${events}${tail}</li>`;
 }
 
 function renderLcsd(records) {

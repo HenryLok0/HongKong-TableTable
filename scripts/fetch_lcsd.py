@@ -355,6 +355,43 @@ def _cell_text(value: object) -> str:
     return str(value or "").replace("\n", " ").strip()
 
 
+def stroke_from_text(text: str) -> dict | None:
+    # Winner tables name the event in words. Letter codes such as MB are separate.
+    compact = re.sub(r"\s+", "", text or "")
+    folded = compact.replace("'", "").replace("’", "").replace("-", "").lower()
+    if "混合雙打" in compact or "mixeddoubles" in folded:
+        return {"stroke": "混合雙打", "doubles": True}
+    if "女子雙打" in compact or "womensdoubles" in folded or "femaledoubles" in folded:
+        return {"stroke": "女子雙打", "doubles": True}
+    if "男子雙打" in compact or "mensdoubles" in folded or "maledoubles" in folded:
+        return {"stroke": "雙打", "doubles": True}
+    if "女子單打" in compact or "womenssingles" in folded or "femalesingles" in folded:
+        return {"stroke": "女子單打", "doubles": False}
+    if "男子單打" in compact or "menssingles" in folded or "malesingles" in folded:
+        return {"stroke": "單打", "doubles": False}
+    return None
+
+
+def age_from_text(text: str) -> dict | None:
+    compact = re.sub(r"\s+", "", text or "")
+    if not compact or len(compact) > 48:
+        return None
+    if "不限" in compact or compact.lower() in {"all", "open"}:
+        return {"ageMin": None, "ageMax": None}
+    span = re.search(r"(\d{1,2})[-–至到](\d{1,2})", compact)
+    if span:
+        low, high = int(span.group(1)), int(span.group(2))
+        if 0 <= low < high <= 120:
+            return {"ageMin": low, "ageMax": high}
+    older = re.search(r"(\d{1,2})歲或以上", compact) or re.search(r"aged(\d{1,2})orabove", compact, re.I)
+    if older:
+        return {"ageMin": int(older.group(1)), "ageMax": None}
+    younger = re.search(r"(\d{1,2})歲或以下", compact) or re.search(r"aged(\d{1,2})orbelow", compact, re.I)
+    if younger:
+        return {"ageMin": 0, "ageMax": int(younger.group(1))}
+    return None
+
+
 def _place_columns(row: list) -> list[tuple[int, int]]:
     found: list[tuple[int, int]] = []
     for idx, cell in enumerate(row):
@@ -378,7 +415,11 @@ def _place_columns(row: list) -> list[tuple[int, int]]:
 
 
 def extract_result_places(pdf) -> dict[str, dict]:
-    """Best placing per name from winner-list tables (1=champion ... 4=fourth)."""
+    """Best placing per name from winner-list tables (1=champion ... 4=fourth).
+
+    Tables that spell the event in words (男子單打, 55-64) keep that stroke and age
+    when they do not also print a letter group code.
+    """
     out: dict[str, dict] = {}
     for page in pdf.pages:
         for table in page.extract_tables() or []:
@@ -392,22 +433,45 @@ def extract_result_places(pdf) -> dict[str, dict]:
             if not place_cols:
                 continue
             current_group = ""
+            current_stroke: dict | None = None
             for row in table[header_end + 1 :]:
-                for cell in row:
-                    match = GROUP_RE.search(_cell_text(cell))
-                    if match:
-                        current_group = match.group(1)
-                        break
+                cells = [_cell_text(cell) for cell in row]
+                row_group = ""
+                row_age: dict | None = None
+                for cell in cells:
+                    if not row_group:
+                        match = GROUP_RE.search(cell)
+                        if match:
+                            row_group = match.group(1)
+                    stroke = stroke_from_text(cell)
+                    if stroke:
+                        current_stroke = stroke
+                    if row_age is None:
+                        parsed = age_from_text(cell)
+                        if parsed:
+                            row_age = parsed
+                if row_group:
+                    current_group = row_group
+                elif row_age is not None:
+                    # This row is identified by the age column, not a previous letter code.
+                    current_group = ""
                 for col_idx, place in place_cols:
                     if col_idx >= len(row):
                         continue
-                    for name in NAME_RE.findall(_cell_text(row[col_idx])):
+                    for name in NAME_RE.findall(cells[col_idx] if col_idx < len(cells) else ""):
                         if not is_person_name(name):
                             continue
                         prev = out.get(name)
                         if prev and prev["place"] <= place:
                             continue
-                        out[name] = {"place": place, "group": current_group}
+                        info: dict = {"place": place, "group": current_group}
+                        if not current_group and current_stroke:
+                            info["stroke"] = current_stroke["stroke"]
+                            info["doubles"] = current_stroke["doubles"]
+                        if not current_group and row_age and row_age.get("ageMin") is not None:
+                            info["ageMin"] = row_age["ageMin"]
+                            info["ageMax"] = row_age["ageMax"]
+                        out[name] = info
     return out
 
 
@@ -464,6 +528,12 @@ def parse_pdf(path: Path, meta: dict) -> tuple[list[dict], dict[str, dict], dict
         }
         if info.get("place"):
             rec["place"] = info["place"]
+        if not group and info.get("stroke"):
+            rec["stroke"] = info["stroke"]
+            rec["doubles"] = bool(info.get("doubles"))
+        if not group and info.get("ageMin") is not None and "ageMin" not in rec:
+            rec["ageMin"] = info["ageMin"]
+            rec["ageMax"] = info.get("ageMax")
         records.append(rec)
     return records, ages, meta
 
@@ -707,6 +777,7 @@ def refresh_result_places() -> None:
 
     updated = 0
     filled_group = 0
+    filled_event = 0
     for key, recs in (data.get("players") or {}).items():
         for rec in recs or []:
             places = url_places.get(rec.get("url") or "") or {}
@@ -723,10 +794,23 @@ def refresh_result_places() -> None:
             if info.get("group") and not rec.get("group"):
                 rec["group"] = info["group"]
                 filled_group += 1
+            # Spell the event only when the PDF itself has no letter group.
+            if not rec.get("group") and info.get("stroke"):
+                changed = rec.get("stroke") != info["stroke"] or rec.get("ageMin") != info.get("ageMin")
+                rec["stroke"] = info["stroke"]
+                rec["doubles"] = bool(info.get("doubles"))
+                if info.get("ageMin") is not None:
+                    rec["ageMin"] = info["ageMin"]
+                    rec["ageMax"] = info.get("ageMax")
+                elif "ageMin" in rec and "ageMin" not in info:
+                    rec.pop("ageMin", None)
+                    rec.pop("ageMax", None)
+                if changed:
+                    filled_event += 1
 
     data["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
     OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"stamped place on {updated} rows, filled group {filled_group}")
+    print(f"stamped place on {updated} rows, filled group {filled_group}, filled event {filled_event}")
 
 
 if __name__ == "__main__":
