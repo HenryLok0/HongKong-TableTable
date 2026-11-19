@@ -1727,12 +1727,6 @@ function rankChips(player) {
     .join("");
 }
 
-function lcsdKindLabel(kind) {
-  if (kind === "result") return "成績";
-  if (kind === "schedule") return "賽程表";
-  return kind || "文件";
-}
-
 function lcsdPlaceLabel(place) {
   const n = Number(place);
   if (n === 1) return "冠軍";
@@ -1790,24 +1784,97 @@ function lcsdRowScore(rec) {
     + (Number.isFinite(place) ? Math.max(0, 5 - place) : 0);
 }
 
-function lcsdMergeKey(rec) {
-  // One row per district + year; score prefers 成績 over 賽程表.
-  if (rec.district || rec.year) return `${rec.district || ""}|${rec.year || ""}`;
-  return String(rec.url || "");
+function lcsdItemKey(rec) {
+  // One row per district, year, and group. A result replaces the schedule of that same group.
+  const group = String(rec.group || "").toUpperCase();
+  return `${rec.district || ""}|${rec.year || ""}|${group}`;
+}
+
+function lcsdEventBounds(rec) {
+  return storedAgeInfo(rec) || mappedFromAgeMap(rec) || resolveLcsdGroup(rec.group, schemeForRecord(rec));
+}
+
+function lcsdIsDoubles(rec) {
+  const code = String(rec.group || "").toUpperCase().replace(/\d+$/, "");
+  // MX / FX / OX are doubles brackets. The prospectus age map sometimes misses that flag.
+  if (code.startsWith("O") || /^[MF]X/.test(code)) return true;
+  if (typeof rec.doubles === "boolean") return rec.doubles;
+  const bounds = mappedFromAgeMap(rec) || resolveLcsdGroup(rec.group, schemeForRecord(rec));
+  if (bounds) return Boolean(bounds.doubles);
+  return isDoublesGroup(code, false);
+}
+
+function lcsdStrokeLabel(rec) {
+  const code = String(rec.group || "").toUpperCase();
+  const event = String(rec.event || "");
+  const mixed = code.startsWith("O") || /混合/.test(event);
+  if (!code && !mixed) return "";
+  if (mixed) return "混合雙打";
+  const stroke = lcsdIsDoubles(rec) ? "雙打" : "單打";
+  return code.startsWith("F") ? `女子${stroke}` : stroke;
+}
+
+function lcsdStrokeRank(rec) {
+  const label = lcsdStrokeLabel(rec);
+  if (label.endsWith("單打")) return 0;
+  if (label.endsWith("雙打") && !label.includes("混合")) return 1;
+  if (label.includes("混合")) return 2;
+  return 3;
+}
+
+function lcsdAgeText(bounds) {
+  if (!bounds || !Number.isFinite(Number(bounds.min))) return "";
+  const min = Number(bounds.min);
+  const max = bounds.max;
+  const open = max == null || max === OPEN || !Number.isFinite(Number(max));
+  if (min <= 0 && !open) return `${max}歲或以下`;
+  if (open) return `${min}歲或以上`;
+  return `${min}–${max}歲`;
+}
+
+function lcsdPrefer(prev, next) {
+  const winner = lcsdRowScore(next) > lcsdRowScore(prev) ? next : prev;
+  const other = winner === next ? prev : next;
+  if (winner.ageMin != null || other.ageMin == null) return winner;
+  return {
+    ...winner,
+    ageMin: other.ageMin,
+    ageMax: other.ageMax,
+    doubles: winner.doubles ?? other.doubles,
+  };
 }
 
 function visibleLcsdRecords(records) {
   const byKey = new Map();
   for (const rec of records || []) {
-    const key = lcsdMergeKey(rec);
+    if (rec.kind === "prospectus") continue;
+    const key = lcsdItemKey(rec);
     const prev = byKey.get(key);
-    if (!prev || lcsdRowScore(rec) > lcsdRowScore(prev)) byKey.set(key, rec);
+    byKey.set(key, prev ? lcsdPrefer(prev, rec) : rec);
   }
   return [...byKey.values()].sort((a, b) => {
     const years = recYear(b) - recYear(a);
     if (years) return years;
     return String(a.district || "").localeCompare(String(b.district || ""), "zh-HK");
   });
+}
+
+function lcsdBundles(records) {
+  const map = new Map();
+  for (const rec of visibleLcsdRecords(records)) {
+    const key = `${rec.district || ""}|${rec.year || ""}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(rec);
+  }
+  const bundles = [...map.values()];
+  for (const bundle of bundles) {
+    bundle.sort((a, b) => {
+      const rank = lcsdStrokeRank(a) - lcsdStrokeRank(b);
+      if (rank) return rank;
+      return (lcsdEventBounds(b)?.min || 0) - (lcsdEventBounds(a)?.min || 0);
+    });
+  }
+  return bundles;
 }
 
 function latestLcsdResult(records) {
@@ -2175,31 +2242,47 @@ function renderComp(records) {
   return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${items}</ul></div>`;
 }
 
-function lcsdItemHtml(rec) {
-  const bits = [rec.district, rec.year, lcsdKindLabel(rec.kind), rec.group].filter(Boolean);
-  const chip = lcsdIsResult(rec) ? lcsdPlaceChip(rec.place) : (lcsdIsUnplaced(rec) ? lcsdUnplacedChip() : "");
-  return `<li><a href="${rec.url}" target="_blank" rel="noreferrer">${escapeHtml(bits.join(" · "))}</a>${chip}</li>`;
+function lcsdEventHtml(rec) {
+  const stroke = lcsdStrokeLabel(rec);
+  const age = lcsdAgeText(lcsdEventBounds(rec));
+  const text = [
+    stroke ? `<b class="lcsd-stroke">${escapeHtml(stroke)}</b>` : "",
+    age ? escapeHtml(age) : "",
+  ].filter(Boolean).join(" ");
+  const chip = lcsdIsResult(rec) && rec.place ? lcsdPlaceChip(rec.place) : "";
+  return `<a href="${rec.url}" target="_blank" rel="noreferrer">${text || "比賽"}</a>${chip}`;
+}
+
+function lcsdBundleHtml(recs) {
+  const head = [recs[0].district, recs[0].year].filter(Boolean).join(" · ");
+  const allUnplaced = recs.every((rec) => lcsdIsUnplaced(rec));
+  const events = recs.map((rec) => {
+    const chip = !allUnplaced && lcsdIsUnplaced(rec) && !(lcsdIsResult(rec) && rec.place) ? lcsdUnplacedChip() : "";
+    return lcsdEventHtml(rec) + chip;
+  }).join("");
+  const tail = allUnplaced ? lcsdUnplacedChip() : "";
+  return `<li><span>${escapeHtml(head)}</span>${events}${tail}</li>`;
 }
 
 function renderLcsd(records) {
-  const sorted = visibleLcsdRecords(records);
-  if (!sorted.length) return "";
-  const newest = Math.max(...sorted.map((rec) => recYear(rec)), 0);
+  const bundles = lcsdBundles(records);
+  if (!bundles.length) return "";
+  const newest = Math.max(...bundles.map((recs) => recYear(recs[0])), 0);
   const floor = newest ? newest - (LCSD_RECENT_YEARS - 1) : 0;
   const recent = [];
   const older = [];
-  for (const rec of sorted) {
-    const year = recYear(rec);
-    if (!year || year >= floor) recent.push(rec);
-    else older.push(rec);
+  for (const recs of bundles) {
+    const year = recYear(recs[0]);
+    if (!year || year >= floor) recent.push(recs);
+    else older.push(recs);
   }
-  const latest = latestLcsdResult(sorted);
-  const titleChip = latest ? ` ${lcsdPlaceChip(latest.place, latest.group)}` : "";
-  const title = `康文署地區分齡紀錄（${sorted.length} 項）`;
+  const latest = latestLcsdResult(bundles.flat());
+  const titleChip = latest ? ` ${lcsdPlaceChip(latest.place, lcsdStrokeLabel(latest))}` : "";
+  const title = `康文署地區分齡紀錄（${bundles.length} 項）`;
   const olderHtml = older.length
-    ? `<details class="lcsd-more"><summary>較早紀錄（${older.length} 項）</summary><ul>${older.map((rec) => lcsdItemHtml(rec)).join("")}</ul></details>`
+    ? `<details class="lcsd-more"><summary>較早紀錄（${older.length} 項）</summary><ul>${older.map((recs) => lcsdBundleHtml(recs)).join("")}</ul></details>`
     : "";
-  return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${recent.map((rec) => lcsdItemHtml(rec)).join("")}</ul>${olderHtml}</div>`;
+  return `<div class="lcsd-box"><span>${escapeHtml(title)}${titleChip}</span><ul>${recent.map((recs) => lcsdBundleHtml(recs)).join("")}</ul>${olderHtml}</div>`;
 }
 
 function genderBadge(item) {
