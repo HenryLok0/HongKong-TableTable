@@ -1148,10 +1148,8 @@ function renderHkttaPast(rows) {
   if (!rows.length) return "";
   const headline = pastHeadlineRows(rows);
   const best = pastBestRow(headline);
-  const picked = new Set(headline.slice(0, PAST_RECENT_PERIODS));
-  if (best) picked.add(best);
-  const visible = headline.filter((row) => picked.has(row));
-  const older = headline.filter((row) => !picked.has(row));
+  const visible = headline.slice(0, PAST_RECENT_PERIODS);
+  const older = headline.slice(PAST_RECENT_PERIODS);
   const periods = headline.map((row) => row.period).filter(Boolean);
   const span = periods.length > 1 ? `${periods[periods.length - 1]} 至 ${periods[0]}` : (periods[0] || "");
   const bestText = best ? ` · 總榜最好第${best.rank}` : "";
