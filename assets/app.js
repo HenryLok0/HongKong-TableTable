@@ -2162,7 +2162,7 @@ function bestRankChip(item, player) {
   const best = careerBestRank(item, player);
   if (typeof best !== "number") return "";
   const points = careerBestPoints(item, player);
-  const text = typeof points === "number" ? `最高排名 ${best}(${points})` : `最高排名 ${best}`;
+  const text = typeof points === "number" ? `最高排名 ${best} (${points}分)` : `最高排名 ${best}`;
   return `<span class="badge ok">${escapeHtml(text)}</span>`;
 }
 
