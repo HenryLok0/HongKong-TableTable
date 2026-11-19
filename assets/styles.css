@@ -684,10 +684,17 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px 16px;
+}
+
+.lcsd-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .lcsd-stroke {
+  color: var(--ink);
   font-weight: 700;
 }
 

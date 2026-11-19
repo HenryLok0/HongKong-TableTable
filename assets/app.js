@@ -2150,10 +2150,22 @@ function careerBestRank(item, player) {
   return ranks.length ? Math.min(...ranks) : null;
 }
 
+function careerBestPoints(item, player) {
+  const points = [];
+  const now = player ? player.points ?? overall(player)?.points : null;
+  if (typeof now === "number") points.push(now);
+  for (const row of pastHeadlineRows(item.hkttaPast || [])) {
+    if (row.group === "ALL" && typeof row.points === "number") points.push(row.points);
+  }
+  return points.length ? Math.max(...points) : null;
+}
+
 function bestRankChip(item, player) {
   const best = careerBestRank(item, player);
   if (typeof best !== "number") return "";
-  return `<span class="badge ok">最高排名 ${best}</span>`;
+  const points = careerBestPoints(item, player);
+  const text = typeof points === "number" ? `最高排名 ${best}(${points})` : `最高排名 ${best}`;
+  return `<span class="badge ok">${escapeHtml(text)}</span>`;
 }
 
 function identityChips(item, player, bucket) {
@@ -2245,12 +2257,13 @@ function renderComp(records) {
 function lcsdEventHtml(rec) {
   const stroke = lcsdStrokeLabel(rec);
   const age = lcsdAgeText(lcsdEventBounds(rec));
-  const text = [
-    stroke ? `<b class="lcsd-stroke">${escapeHtml(stroke)}</b>` : "",
-    age ? escapeHtml(age) : "",
-  ].filter(Boolean).join(" ");
   const chip = lcsdIsResult(rec) && rec.place ? lcsdPlaceChip(rec.place) : "";
-  return `<a href="${rec.url}" target="_blank" rel="noreferrer">${text || "比賽"}</a>${chip}`;
+  const strokeHtml = stroke ? `<b class="lcsd-stroke">${escapeHtml(stroke)}</b>` : "";
+  if (!age) {
+    const label = strokeHtml || "比賽";
+    return `<span class="lcsd-event"><a href="${rec.url}" target="_blank" rel="noreferrer">${label}</a>${chip}</span>`;
+  }
+  return `<span class="lcsd-event">${strokeHtml}<a href="${rec.url}" target="_blank" rel="noreferrer">${escapeHtml(age)}</a>${chip}</span>`;
 }
 
 function lcsdBundleHtml(recs) {
@@ -2267,14 +2280,19 @@ function lcsdBundleHtml(recs) {
 function renderLcsd(records) {
   const bundles = lcsdBundles(records);
   if (!bundles.length) return "";
-  const newest = Math.max(...bundles.map((recs) => recYear(recs[0])), 0);
-  const floor = newest ? newest - (LCSD_RECENT_YEARS - 1) : 0;
-  const recent = [];
-  const older = [];
-  for (const recs of bundles) {
-    const year = recYear(recs[0]);
-    if (!year || year >= floor) recent.push(recs);
-    else older.push(recs);
+  let recent = bundles;
+  let older = [];
+  // Short lists stay open. Longer lists keep the recent years visible and fold the rest.
+  if (bundles.length > 7) {
+    const newest = Math.max(...bundles.map((recs) => recYear(recs[0])), 0);
+    const floor = newest ? newest - (LCSD_RECENT_YEARS - 1) : 0;
+    recent = [];
+    older = [];
+    for (const recs of bundles) {
+      const year = recYear(recs[0]);
+      if (!year || year >= floor) recent.push(recs);
+      else older.push(recs);
+    }
   }
   const latest = latestLcsdResult(bundles.flat());
   const titleChip = latest ? ` ${lcsdPlaceChip(latest.place, lcsdStrokeLabel(latest))}` : "";
