@@ -4231,5 +4231,95 @@
     "url": "http://www.hktta.org.hk/gameinfo/local/local_hkyouthopen/Result/All_Result.pdf",
     "src": "youth",
     "year": ""
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_BD_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_GD_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_ME.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_ME_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_WD.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_WD_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/EntryList/DrawList_XD.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen/2026/OnlinePayment.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/BD_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/DrawList_BD.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/DrawList_GD.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/DrawList_ME.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/DrawList_WD.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/DrawList_WD_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/DrawList_XD.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/EntryList/GD_P.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/Result/MA.pdf",
+    "src": "open",
+    "year": "2026"
+  },
+  {
+    "url": "https://www.hktta.org.hk/gameinfo/local/local_hkopen_ranking/2026/Result/ME.pdf",
+    "src": "open",
+    "year": "2026"
   }
 ]
