@@ -23,7 +23,19 @@ from build_lookup_index import shard_id  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 URL = "https://www.lcsd.gov.hk/ls/dagc/clpss/prop/b5/2_sch_b5_Result_of_Fixture_Draw_2026.pdf"
 USER_AGENT = "Mozilla/5.0"
-GROUP_TITLE_RE = re.compile(r"([A-Z]{2,3})組")
+def group_from_title(texts: list[str]) -> str:
+    # Headers look like "MA組", "MA (55歲或以上)", or "先進(FB 組)".
+    title = " ".join(texts)
+    for pattern in (
+        r"\(([A-Z]{2,3})\s*組\)",
+        r"([A-Z]{2,3})\s*組",
+        r"([A-Z]{2,3})\.?\s*[(（]",
+        r"([A-Z]{2,3})賽程",
+    ):
+        match = re.search(pattern, title)
+        if match:
+            return match.group(1)
+    return ""
 HAN_RE = re.compile(r"^[\u4e00-\u9fff]{2,4}$")
 # First-round names sit on the left. Later-round boxes are match codes such as "MA 25".
 NAME_COLUMN = 0.32
@@ -34,9 +46,10 @@ def download(url: str, dest: Path) -> None:
     dest.write_bytes(urllib.request.urlopen(req, timeout=60).read())
 
 
-def page_names(ocr: RapidOCR, page, zoom: float = 2.0) -> tuple[str, list[tuple[str, float]]]:
+def page_names(ocr: RapidOCR, page, zoom: float = 2.0, left_only: bool = True) -> tuple[str, list[tuple[str, float]], str]:
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
     width = pix.width
+    height = pix.height
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
         image_path = Path(handle.name)
     pix.save(image_path)
@@ -47,21 +60,31 @@ def page_names(ocr: RapidOCR, page, zoom: float = 2.0) -> tuple[str, list[tuple[
     txts = [] if output.txts is None else list(output.txts)
     boxes = [] if output.boxes is None else list(output.boxes)
     scores = [] if output.scores is None else list(output.scores)
-    title = " ".join(txts[:8])
-    group_match = GROUP_TITLE_RE.search(title)
-    group = group_match.group(1) if group_match else ""
+    header = []
+    for text, box in zip(txts, boxes):
+        if float(box[0][1]) <= height * 0.22:
+            header.append(str(text))
+    group = group_from_title(header or txts[:12])
+    title = " ".join(header or txts[:12])
     doubles = "雙打" in title or bool(re.match(r"^[MF]([KLM]|D)", group))
     found: list[tuple[str, float]] = []
     for text, box, score in zip(txts, boxes, scores):
         if float(score) < 0.8:
             continue
         left = float(box[0][0])
-        if left > width * NAME_COLUMN:
+        # Fixture brackets put the players on the left. Result sheets use the whole page.
+        if left_only and left > width * NAME_COLUMN:
             continue
         for name in split_names(str(text), doubles):
             if lcsd.is_person_name(name):
                 found.append((name, float(score)))
-    return group, found
+    if "混合" in title:
+        style = "mixed"
+    elif "雙打" in title:
+        style = "doubles"
+    else:
+        style = ""
+    return group, found, style
 
 
 def split_names(text: str, doubles: bool) -> list[str]:
@@ -78,17 +101,25 @@ def split_names(text: str, doubles: bool) -> list[str]:
     return []
 
 
-def ocr_fixture(path: Path) -> dict[str, set[str]]:
+def ocr_fixture(path: Path, left_only: bool = True) -> dict[str, set[str]]:
     doc = pymupdf.open(path)
     try:
         ocr = RapidOCR()
         by_group: dict[str, set[str]] = {}
+        mixed_groups: set[str] = set()
+        doubles_groups: set[str] = set()
         for index, page in enumerate(doc, 1):
-            group, names = page_names(ocr, page)
+            group, names, style = page_names(ocr, page, left_only=left_only)
+            if group and style == "mixed":
+                mixed_groups.add(group)
+            elif group and style == "doubles":
+                doubles_groups.add(group)
             bucket = by_group.setdefault(group or "?", set())
             before = len(bucket)
             bucket.update(name for name, _score in names)
             print(f"page {index:02d} {group or '?':4} +{len(bucket) - before:3} total {len(bucket)}", flush=True)
+        ocr_fixture.mixed_groups = mixed_groups
+        ocr_fixture.doubles_groups = doubles_groups
         return by_group
     finally:
         doc.close()

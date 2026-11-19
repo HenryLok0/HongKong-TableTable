@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import ssl
@@ -104,6 +105,73 @@ def is_person_name(name: str) -> bool:
     if name[0] == name[-1] and len(set(name)) == 1:
         return False
     return True
+
+
+def district_hint(url: str) -> str:
+    # A few archived fixture filenames never picked up the listing district.
+    lower = (url or "").lower()
+    if "tmd" in lower or "tuen_mun" in lower or "tuen-mun" in lower:
+        return "屯門"
+    if "southern" in lower or "sdag" in lower:
+        return "南區"
+    return ""
+
+
+def pdf_sha256(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()
+
+
+def blank_scan_action(kind: str, count: int, digest: str, old_doc: dict | None, has_rows: bool) -> str:
+    # Text extraction already found people, or this is a prospectus.
+    if count or kind not in {"schedule", "result"}:
+        return "use"
+    previous = (old_doc or {}).get("sha256") or ""
+    # Same bytes as the file whose names are already stored. Do not OCR again.
+    if has_rows and (not previous or previous == digest):
+        return "keep"
+    if previous and previous == digest:
+        return "skip"
+    return "ocr"
+
+
+def ocr_name_records(path: Path, meta: dict) -> list[dict]:
+    from ocr_lcsd_fixture import ocr_fixture
+
+    by_group = ocr_fixture(path, left_only=meta.get("kind") != "result")
+    district = meta.get("district") or district_hint(meta.get("url") or "")
+    year = str(meta.get("year") or "")
+    bundle = load_age_maps().get("maps") or {}
+    ages = (bundle.get(meta.get("url") or "") or {}).get("groups") or (
+        bundle.get(f"{district}|{year}") or {}
+    ).get("groups") or {}
+    ungrouped = by_group.get("?") or set()
+    records = []
+    for group, names in by_group.items():
+        if not group or group == "?":
+            continue
+        for name in sorted(names):
+            fields = group_age_fields(group, ages)
+            mixed = group in getattr(ocr_fixture, "mixed_groups", ())
+            if mixed or "X" in group or group in getattr(ocr_fixture, "doubles_groups", ()):
+                fields["doubles"] = True
+            if mixed:
+                fields["stroke"] = "混合雙打"
+            records.append(
+                {
+                    "name": name,
+                    "norm": normalize_name(name),
+                    "group": group,
+                    "district": district,
+                    "year": year,
+                    "kind": meta.get("kind") or "schedule",
+                    "event": meta.get("event") or f"{district}分齡乒乓球比賽 {year}".strip(),
+                    "url": meta.get("url") or "",
+                    **fields,
+                }
+            )
+    if not records and ungrouped:
+        raise RuntimeError(f"ocr saw {len(ungrouped)} names but no group code")
+    return records
 
 
 def kind_from_url(url: str) -> str:
@@ -633,13 +701,20 @@ def main() -> None:
         print(f"extra {url}")
 
     old = json.loads(OUT_PATH.read_text(encoding="utf-8")) if OUT_PATH.exists() else {}
-    done_urls = {d.get("url") for d in (old.get("documents") or []) if d.get("url")}
+    old_docs = {d.get("url"): d for d in (old.get("documents") or []) if d.get("url")}
+    done_urls = set(old_docs)
     skip_urls = done_urls - listing_urls
     if skip_urls:
         print(f"skip {len(skip_urls)} already-parsed LCSD pdfs")
+    urls_with_rows: set[str] = set()
+    for recs in (old.get("players") or {}).values():
+        for rec in recs or []:
+            if rec.get("url"):
+                urls_with_rows.add(rec["url"])
 
     players: dict[str, list[dict]] = defaultdict(list)
     parsed_docs = []
+    ocr_replaced: set[str] = set()
     age_bundle = load_age_maps()
     age_maps: dict = age_bundle.get("maps") or {}
     with tempfile.TemporaryDirectory() as tmp:
@@ -661,18 +736,52 @@ def main() -> None:
                 print(f"  parse error: {exc}")
                 continue
             kind = parsed_meta.get("kind") or kind_from_url(url)
-            district = parsed_meta.get("district") or ""
-            year = parsed_meta.get("year") or ""
-            parsed_docs.append(
-                {
-                    "url": url,
-                    "district": district,
-                    "year": year,
-                    "kind": kind,
-                    "names": len(records),
-                    "ageCodes": len(ages),
-                }
-            )
+            district = parsed_meta.get("district") or meta.get("district") or district_hint(url)
+            year = parsed_meta.get("year") or meta.get("year") or ""
+            digest = pdf_sha256(body)
+            action = blank_scan_action(kind, len(records), digest, old_docs.get(url), url in urls_with_rows)
+            if action == "keep":
+                previous = dict(old_docs.get(url) or {})
+                previous["sha256"] = digest
+                previous["ocr"] = True
+                parsed_docs.append(previous)
+                print("  text empty, keep stored names")
+                continue
+            if action == "skip":
+                previous = dict(old_docs.get(url) or {"url": url, "district": district, "year": year, "kind": kind, "names": 0, "ageCodes": 0})
+                previous["sha256"] = digest
+                parsed_docs.append(previous)
+                print("  text empty, same file, skip ocr")
+                continue
+            if action == "ocr":
+                print("  text empty, ocr")
+                try:
+                    found = ocr_name_records(path, {**meta, **parsed_meta, "district": district, "year": year, "kind": kind, "url": url})
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  ocr error: {exc}")
+                    found = None
+                if found:
+                    records = found
+                    ages = {}
+                    ocr_replaced.add(url)
+                    print(f"  ocr names {len(records)}")
+                elif found == []:
+                    ages = {}
+                    print("  ocr names 0")
+                else:
+                    continue
+            entry = {
+                "url": url,
+                "district": district,
+                "year": year,
+                "kind": kind,
+                "names": len(records),
+                "ageCodes": len(ages),
+            }
+            if action == "ocr":
+                entry["sha256"] = digest
+                entry["ocr"] = True
+            parsed_docs.append(entry)
             print(f"  names {len(records)} age-codes {len(ages)}")
             if ages:
                 overwrite = kind == "prospectus"
@@ -694,6 +803,10 @@ def main() -> None:
                     row["ageMin"] = rec["ageMin"]
                     row["ageMax"] = rec["ageMax"]
                     row["doubles"] = rec["doubles"]
+                elif "doubles" in rec:
+                    row["doubles"] = rec["doubles"]
+                if rec.get("stroke"):
+                    row["stroke"] = rec["stroke"]
                 players[rec["norm"]].append(row)
 
     prev_count = None
@@ -711,6 +824,8 @@ def main() -> None:
         for name, recs in (old.get("players") or {}).items():
             existing = {(r.get("url"), r.get("group"), r.get("year")) for r in players.get(name, [])}
             for rec in recs:
+                if rec.get("url") in ocr_replaced:
+                    continue
                 key = (rec.get("url"), rec.get("group"), rec.get("year"))
                 if rec.get("url") and key not in existing:
                     players[name].append(rec)
@@ -813,8 +928,97 @@ def refresh_result_places() -> None:
     print(f"stamped place on {updated} rows, filled group {filled_group}, filled event {filled_event}")
 
 
+def stored_row(rec: dict) -> dict:
+    row = {
+        "name": rec["name"],
+        "district": rec.get("district") or "",
+        "year": rec.get("year") or "",
+        "kind": rec.get("kind") or "",
+        "group": rec.get("group") or "",
+        "event": rec.get("event") or "",
+        "url": rec.get("url") or "",
+    }
+    if rec.get("place"):
+        row["place"] = rec["place"]
+    if "ageMin" in rec:
+        row["ageMin"] = rec["ageMin"]
+        row["ageMax"] = rec["ageMax"]
+        row["doubles"] = rec["doubles"]
+    elif "doubles" in rec:
+        row["doubles"] = rec["doubles"]
+    if rec.get("stroke"):
+        row["stroke"] = rec["stroke"]
+    return row
+
+
+def ocr_empty_documents() -> None:
+    """Read schedule and result PDFs that still have no names, once per file."""
+    if not OUT_PATH.exists():
+        print("missing lcsd.json")
+        return
+    data = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    targets = [
+        doc
+        for doc in (data.get("documents") or [])
+        if doc.get("kind") in {"schedule", "result"} and not doc.get("names") and not doc.get("sha256")
+    ]
+    print(f"blank scans: {len(targets)}", flush=True)
+    players: dict[str, list] = data.setdefault("players", {})
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        for index, doc in enumerate(targets, 1):
+            url = doc.get("url") or ""
+            print(f"[{index}/{len(targets)}] {url}", flush=True)
+            body = get_pdf(url, referer=PORTAL_URL)
+            if not body:
+                print("  skip (no pdf)")
+                continue
+            path = tmp_dir / f"{index}.pdf"
+            path.write_bytes(body)
+            digest = pdf_sha256(body)
+            meta = dict(doc)
+            if not meta.get("district"):
+                meta["district"] = district_hint(url)
+            used_ocr = False
+            try:
+                records, _ages, parsed = parse_pdf(path, meta)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  parse error: {exc}")
+                records, parsed = [], meta
+            if records:
+                print(f"  text names {len(records)}")
+            else:
+                try:
+                    records = ocr_name_records(path, {**meta, **parsed, "url": url})
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  ocr error: {exc}")
+                    continue
+                used_ocr = True
+                print(f"  ocr names {len(records)}", flush=True)
+            added = 0
+            for rec in records:
+                rows = players.setdefault(rec["norm"], [])
+                if any(row.get("url") == url and row.get("group") == rec.get("group") for row in rows):
+                    continue
+                rows.append(stored_row(rec))
+                added += 1
+            doc["district"] = meta.get("district") or doc.get("district") or ""
+            doc["year"] = str(parsed.get("year") or meta.get("year") or doc.get("year") or "")
+            doc["names"] = sum(1 for recs in players.values() for row in recs if row.get("url") == url)
+            doc["sha256"] = digest
+            if used_ocr:
+                doc["ocr"] = True
+            data["updated"] = datetime.now(HKT).strftime("%Y-%m-%d %H:%M")
+            data["count"] = len(players)
+            OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+            print(f"  stored {added}")
+    print("ocr empty done")
+
+
 if __name__ == "__main__":
     if "--places" in sys.argv:
         refresh_result_places()
+    elif "--ocr-empty" in sys.argv:
+        ocr_empty_documents()
     else:
         main()

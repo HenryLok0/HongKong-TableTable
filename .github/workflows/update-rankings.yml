@@ -33,7 +33,7 @@ jobs:
         run: python scripts/fetch_hktta_history.py
         continue-on-error: true
       - name: Fetch LCSD records
-        timeout-minutes: 20
+        timeout-minutes: 45
         run: python scripts/fetch_lcsd.py
         continue-on-error: true
       - name: Fetch Hang Seng badge exams

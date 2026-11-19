@@ -1808,8 +1808,8 @@ function lcsdIsDoubles(rec) {
 function lcsdStrokeLabel(rec) {
   const code = String(rec.group || "").toUpperCase();
   const stored = String(rec.stroke || "");
-  // Winner lists sometimes spell 男子單打 and the age instead of a letter code.
-  if (!code && stored) return stored;
+  // Winner lists and some scanned brackets spell 混合雙打 instead of a letter code.
+  if (stored.includes("混合") || (!code && stored)) return stored;
   const event = String(rec.event || "");
   const mixed = code.startsWith("O") || /混合/.test(event);
   if (!code && !mixed) return "";
